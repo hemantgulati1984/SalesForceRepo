@@ -1,0 +1,76 @@
+<apex:page standardController="Job_Application__c">
+    <apex:variable value="{!Job_Application__c.Candidate__r}" var="candidate"/>
+    <apex:variable value="{!Job_Application__c.Position__r}" var="position"/>
+    <apex:composition template="{!$Page.ConsoleTemplatePage}">
+        <apex:define name="Header">
+            <apex:sectionHeader title="{!$ObjectType.Job_Application__c.label}Console" subtitle="{!Job_Application__c.name&' for ' &$ObjectType.Position__c.label&': '&Job_Application__c.Position__r.name}"/>
+        </apex:define>
+        <apex:define name="Column1">
+            <apex:form >
+                <apex:pageBlock mode="detail">
+                    <apex:pageBlockButtons location="top">
+                        <apex:commandButton action="{!edit}" value="Edit"/>
+                        <apex:commandButton action="{!delete}" value="Delete"/>
+                    </apex:pageBlockButtons>
+                    <apex:pageBlockSection columns="1" title="JobApplicationInformation">
+                        <apex:outputField value="{!Job_Application__c.Position__c}"/>
+                       
+                        <apex:outputField value="{!Job_Application__c.name}"/>
+                       
+                        <apex:outputField value="{!Job_Application__c.Total_Rating__c}"/>
+                        <apex:outputField value="{!Job_Application__c.Average_Rating__c}"/>
+                        <apex:outputField value="{!Job_Application__c.Reviews__c}"/>
+                        <apex:outputField value="{!Job_Application__c.OwnerId}"/>
+                        <apex:outputField value="{!Job_Application__c.CreatedById}"/>
+                        <apex:pageBlockSectionItem >
+                            <apex:outputLabel value="LastModifiedBy"/>
+                            <apex:outputText >
+                                <apex:outputField value="{!Job_Application__c.LastModifiedById}"/>,&nbsp;
+                                <apex:outputField value="{!Job_Application__c.LastModifiedDate}"/>
+                            </apex:outputText>
+                        </apex:pageBlockSectionItem>
+                    </apex:pageBlockSection>
+                </apex:pageBlock>
+            </apex:form>
+        </apex:define>
+        <apex:define name="Column2">
+            <apex:form >
+                <apex:pageBlock mode="detail" tabStyle="Candidate__c">
+                    <apex:pageBlockButtons location="top">
+                        <apex:commandButton value="Edit" action="{!URLFOR($Action.Candidate__c.edit,Job_Application__c.Candidate__c)}"/>
+                    </apex:pageBlockButtons>
+                    <apex:pageBlockSection columns="1" title="CandidateInformation">
+                        <apex:pageBlockSectionItem >
+                            <apex:outputLabel value="Name"/>
+                            <apex:outputText value="{!candidate.Name}"/>
+                        </apex:pageBlockSectionItem>
+                        <apex:outputField value="{!candidate.Mobile__c}"/>
+                        <apex:outputField value="{!candidate.Email__c}"/>
+                        
+                        <apex:outputField value="{!Job_Application__c.Candidate__c}"/>
+                    </apex:pageBlockSection>
+                </apex:pageBlock>
+            </apex:form>
+        </apex:define>
+        <apex:define name="Column3">
+            <apex:form >
+                <apex:pageBlock mode="detail" tabStyle="Position__c">
+                    <apex:pageBlockButtons location="top">
+                        <apex:commandButton value="Edit" action="{!URLFOR($Action.Position__c.edit,Job_Application__c.Position__c)}"/>
+                    </apex:pageBlockButtons>
+                    <apex:pageBlockSection columns="1" title="PositionInformation">
+                        <apex:outputField value="{!Job_Application__c.Position__c}"/>
+                        <apex:outputField value="{!position.Name}"/>
+                        
+                        <apex:outputField value="{!position.Type__c}"/>
+                       
+                        <apex:outputField value="{!position.Days_Opened__c}"/>
+                        <apex:outputField value="{!position.Functional_Area__c}"/>
+                        <apex:outputField value="{!position.Min_Pay__c}"/>
+                        <apex:outputField value="{!position.Max_Pay__c}"/>
+                    </apex:pageBlockSection>
+                </apex:pageBlock>
+            </apex:form>
+        </apex:define>
+    </apex:composition>
+</apex:page>

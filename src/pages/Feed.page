@@ -1,0 +1,6 @@
+<apex:page standardcontroller="Account">
+    <c:SitePoweredBy /> 
+    <chatter:feed entityId="{! Account.Id }"/>
+    <!--<chatter:feedWithFollowers  entityId="{! Account.Id }" /> -->
+    <chatter:follow entityId="{! Account.Id }"/>
+</apex:page>
