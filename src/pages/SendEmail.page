@@ -1,0 +1,14 @@
+<apex:page >
+<INPUT style="BACKGROUND-IMAGE: url(/img/bgButton.gif); BORDERBOTTOM:
+#5c5d61 1px solid; PADDING-BOTTOM:
+1px; BORDER-LEFT-STYLE: none; PADDING-LEFT: 3px; PADDING-RIGHT:
+3px; DISPLAY: inline; BACKGROUND-REPEAT:
+repeat-x; FONT-FAMILY: 'Verdana', 'Geneva', sans-serif;
+BACKGROUND-POSITION: left top; BORDER-TOP-STYLE:
+none; COLOR: #ffffff; FONT-SIZE: 80%; CURSOR: pointer; FONTWEIGHT:
+bold; BORDER-RIGHT: #5c5d61 1px solid;
+PADDING-TOP: 1px" title="This will send an email"
+onclick="javascript:window.location='/_ui/core/email/author/EmailAuthor';" name="SendAnEmail" value="Send"
+type="button" />
+
+</apex:page>
