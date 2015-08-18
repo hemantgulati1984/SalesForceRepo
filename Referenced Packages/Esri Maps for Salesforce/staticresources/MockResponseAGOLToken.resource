@@ -1,0 +1,1 @@
+{"token":"0123456789ABCDEFGHIJ", "expires":1234567890, "ssl":false}

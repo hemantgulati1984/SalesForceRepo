@@ -1,0 +1,15 @@
+<apex:page action="{!if(Visualization__c.ownerid!= $User.Id && $Profile.Name !="System Administrator" ,
+    null,
+    urlFor($Action.Visualization__c.Delete, $CurrentPage.Parameters.id, null, true)
+    )
+    }"
+  standardController="esrimaps__Visualization__c">
+
+  <apex:outputText value="{!esrimaps__Visualization__c.ownerid}" rendered="false" />
+     <apex:pageBlock >
+        <apex:PageMessage summary="Only the map owner or system administrator can delete the map"
+            severity="Warning"
+            strength="3"/>
+        <apex:pageMessages />
+    </apex:pageBlock>
+</apex:page>

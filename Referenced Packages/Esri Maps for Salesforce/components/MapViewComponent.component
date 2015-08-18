@@ -1,0 +1,448 @@
+<apex:component controller="esrimaps.BisProviderGlobalRemoter">
+
+    <apex:attribute name="varControllerNamespace" required="true" description="JavaScript remoter controller namespace" type="string" />
+    <apex:attribute name="varControllerName" required="true" description="JavaScript remoter controller class" type="string" />
+    <apex:attribute name="varPermission" required="true" description="Permission to read map" type="Boolean" />
+	<apex:attribute name="varAGOL" required="true" type="String" description="Portal URL" />
+	
+	<apex:attribute name="varIsWorkflow" type="Boolean" required="false" description="Use workflow ArcGIS Online credential. Attribute varReferrer must also be set."
+                    assignTo="{!isWorkflow}" />
+    <apex:attribute name="varReferrer" type="String" required="false" description="Referrer to use for token generation. Attribute varIsWorkflow must also be set."
+                    assignTo="{!tokenReferer}" /> 
+
+	<script type="text/javascript">
+	    function initMapProperties(mapName, mapDescription){
+	        // Note it doesn't SAVE to Salesforce until explicit save
+		    require([
+	                "esri-maps-sf/bisprovider/BisProviderRemoter",
+	                "dojo/domReady!"
+	                ], 
+	            function(
+	                Remoter
+	                ) {
+	                    if (!Remoter.controllerParams)
+	                        Remoter.controllerParams = {};
+	                        
+                        Remoter.controllerParams.mapName = mapName;
+                        Remoter.controllerParams.mapDescription = mapDescription;
+	                });
+	    }
+	    
+		function loadJazz(appDom, mapName, mapDescription) {
+			require([
+				"dojo/_base/declare", "dojo/dom", "dojo/dom-class", "dojo/json",
+				"dojo/on", "dojo/topic", "dojo/when", "dojo/Deferred", 
+
+				"esri-maps-sf/bisprovider/BisProvider", 
+				"esri-maps/bisprovider/BISProvider", "esri-maps/bisprovider/_ProxyProviderMixin",
+				"esri-maps-sf/bisprovider/BisProviderRemoter",
+				"dojo/domReady!"
+				], 
+			function(
+				declare, dom, domClass, dojoJSON,
+				on, topic, when, Deferred,
+				
+				BISProvider, BisProviderImpl,
+				_ProxyProviderMixin,
+				Remoter
+				) {
+	
+				var iframe = dom.byId(appDom); 
+				if (!iframe)
+				    return;
+				
+				if (iframe.src == require.toUrl("esri-maps-sf/components/Map.html")) // already set, done!
+                    return;
+                    
+				// Setting up singleton class for accessing JavaScript Apex remoting
+				Remoter.controllerName = "{!varControllerName}"; 
+				Remoter.namespacePrefix = "{!varControllerNamespace}";
+				Remoter.useOrganizationCredential = false;
+				Remoter.isOneOffSignIn = false; //{!NOT(ISBLANK($CurrentPage.parameters.oneoffsignin))};
+				Remoter.portalUrl = "{!JSENCODE(PortalUrl)}"; //Remoter.isOneOffSignIn ? "{!JSENCODE($CurrentPage.parameters.oneoffsignin)}" : 
+                Remoter.userSessionId = '{!$Api.Session_ID}';
+				Remoter.loadUnsavedChanges = {!NOT(ISBLANK($CurrentPage.parameters.unsavedChanges))};
+	
+				if ({!NOT(ISBLANK(agolCredential))}) {
+				    Remoter.credential = dojoJSON.parse("{!JSENCODE(agolCredential)}");
+				}
+                    
+
+				// TODO: Formalized the parameters, provide save map prototype
+				Remoter.controllerParams = {
+					id: "{!JSENCODE(CASESAFEID($CurrentPage.parameters.id))}", // 18 character ID, don't change case or VF Remoting will fail
+					dashboardComponentId: "{!JSENCODE($CurrentPage.parameters.dashboardComponentId)}", // Constants.URLParams_DashboardCommponent
+					dashboardComponentConfigurable: {!varPermission} && {!IF(ISBLANK($CurrentPage.parameters.dashboardComponentConfigurable), false, JSENCODE($CurrentPage.parameters.dashboardComponentConfigurable))},
+					mapName: mapName, //theField && theField.value, 
+					mapDescription: mapDescription,
+					pages: {
+						settings: "{!$Page.Settings}",
+						configuration: "{!$Page.Configuration}",
+						dashboardmapedit: "{!$Page.DashboardMapDetailsView}"
+					}
+				};
+
+				var dPendingAnimation = new Deferred();	
+				var hReady = null;
+				
+				// Listening to the map ready event from EMF to remove pending gif
+				hReady = topic.subscribe("esri-maps-sf/map-ready", function(mapId) {
+					if (hReady) hReady.remove();
+					dPendingAnimation.resolve();
+				});	
+				
+				// Listening to the "float" command event from EMF to popup a new window
+				var hFloat = null;
+				hFloat = topic.subscribe("esri-maps-sf/floatMap", function(mapConfig){
+					if (mapConfig && mapConfig.json) {
+						// TODO: open as a clone
+					}
+					else {
+						window.open(window.location.href, "_blank"); 
+					}
+				});
+				
+				
+				// Set iFrame height explicitly for dashboard component map
+				if (window.top != window.self && {!NOT(ISBLANK($CurrentPage.parameters.dashboardComponentHeight))}) {	// iframe inline in dashboard (Also in Salesforce1?)
+					iframe.height= "{!JSENCODE($CurrentPage.parameters.dashboardComponentHeight)}";
+				}
+				
+				// DOM class to turn on/off wait gif (CSS)
+				domClass.add(iframe, "pending");
+				dPendingAnimation.then(function() {
+					domClass.remove(iframe, "pending");
+				});
+				
+				// Finally set the iFrame source and bisprovider
+				Remoter.tokenReferer = require.toUrl("esri-maps-sf/components/Map.html");
+				iframe.src = require.toUrl("esri-maps-sf/components/Map.html"); 
+				var bisProvider = declare([BISProvider, _ProxyProviderMixin])
+					(new BisProviderImpl(), {
+						proxy : {
+							iframeNode: iframe
+						}
+					});
+				});
+
+			}
+	</script>
+
+
+
+    <script type="text/javascript">
+
+       function toggleTablePane(bShow, idBorderContainer, idTablePanel){
+        require(["dijit/registry", "dojo/dom-style"], function(registry, domStyle) {
+            var bc = registry.byId(idBorderContainer);
+            var bottomPane= registry.byId(idTablePanel);
+            if (bc && bottomPane){
+                //bottomPane.splitter = bShow;
+                //var btmSplitter = bc.getSplitter("bottom");
+                //debugger;
+                var bottomHeight = domStyle.get(bottomPane.domNode, "height");
+                if (!bShow || bottomHeight < 200) {
+                    domStyle.set(bottomPane.domNode, "height", !bShow? "0px" : "200px");
+                    bc.resize(); // resize({h: , w:})
+                }
+            }
+            
+        });
+       }
+       function saveEMFMap (/* function */ onSaveStart, /* function */ onSaveComplete, /* function */ onMapDirty) {   
+           //onSaveStart();
+           require([
+               "dojo/_base/declare", "dojo/dom", "dojo/on",  "dojo/topic", "dojo/when",
+               "esri-maps-sf/bisprovider/BisProviderRemoter",
+               "dojo/domReady!"], 
+               function(
+                   declare, dom, on, topic, when,
+                   Remoter
+                   ) {
+                var isNewMap = !Remoter.controllerParams.id;
+                when(Remoter.save(),             
+                    function(viz) {
+                        var vizId = Remoter.controllerParams.id; // Note  JS Remoting should return standardized 18-charac id 
+                        /*remove the auto-recocover for existing map. Always keep EventListener(stay/leave?) when user leave the page */
+                        //if (isNewMap && vizId) {
+                        //window.removeEventListener("beforeunload", onbeforeUnloadListener);
+                        //startAutoRecover();                     
+                        // }
+                        onSaveComplete(vizId); //call actionFunction to toggle Apex property
+                    },
+                    function (err){
+                        alert("Failed to save map!");
+                        onSaveComplete(null);
+                    }
+                );
+           
+              });
+        }
+     
+        function saveAsEMFMap (/* function */ onSaveStart, /* function */ onSaveComplete) {   
+           
+           require([
+               "dojo/_base/declare", "dojo/dom", "dojo/on",  "dojo/topic", "dojo/when",
+               "esri-maps-sf/bisprovider/BisProviderRemoter",
+               "dojo/domReady!"], 
+               function(
+                   declare, dom, on, topic, when,
+                   Remoter
+                   ) {
+                var currentId = Remoter.controllerParams.id;
+                var currentName = Remoter.controllerParams.mapName;
+                var currentDesc = Remoter.controllerParams.mapDescription;
+                /*remove EventListener(stay/leave) when user click "saveas"..It will start a new session */
+                window.removeEventListener("beforeunload", onbeforeUnloadListener);
+                
+                onSaveStart();
+                
+                Remoter.controllerParams.id = null; // temporarily nullify
+                when(Remoter.save(),             
+                    function(viz) {
+                        var newId = Remoter.controllerParams.id;
+                        
+                        // reset properties
+                        Remoter.controllerParams.id = currentId;
+                        Remoter.controllerParams.mapName = currentName;
+                        Remoter.controllerParams.mapDescription = currentDesc;
+                        
+                        onSaveComplete(newId);   // What to do? 
+                    },
+                    function (err){
+                        alert("Failed to save map!");
+                        Remoter.controllerParams.id = currentId;
+                        Remoter.controllerParams.mapName = currentName;
+                        Remoter.controllerParams.mapDescription = currentDesc;
+                        onSaveComplete(null);
+                    }
+                );
+           
+              });
+        }
+        
+        function updateSelection (recordId, layerId, isSelected) {  
+           var selectionParams = { 
+                idRecord: recordId, 
+                idLayer: layerId, 
+                isSelected: isSelected
+           };
+           require([
+               "dojo/_base/declare", "dojo/when",
+               "esri-maps-sf/bisprovider/BisProviderRemoter",
+               "dojo/domReady!"], 
+               function(
+                   declare, when, Remoter
+                   ) {
+                    Remoter.trackLayerSelection(null); // pause selection change tracking
+                    when(Remoter.request('changeSelectState', selectionParams),             
+                        function(result) {
+                            Remoter.trackLayerSelection(layerId);
+                        },
+                        function (err){
+                            if (err) alert(err);
+                            Remoter.trackLayerSelection(layerId);
+                           // TODO: Handle Not visible, no geometry
+                        }
+                    );
+           
+              });
+        }
+        
+        function goTo (recordId, layerId) {   
+           require([
+               "dojo/_base/declare", "dojo/when",
+               "esri-maps-sf/bisprovider/BisProviderRemoter",
+               "dojo/domReady!"], 
+               function(
+                   declare, when, Remoter
+                   ) {
+                 when(Remoter.request('gotoRecord', { idRecord: recordId, idLayer: layerId } ),             
+                     function(result) {
+                     },
+                     function (err){
+                       alert(err);
+                     }
+                 );
+           
+              });
+        }
+        
+        function untrackSelection(layerId){
+           require([ "esri-maps-sf/bisprovider/BisProviderRemoter",
+              "dojo/domReady!"], 
+              function(Remoter)  {
+                  Remoter.trackLayerSelection(null);
+           });
+        }
+        
+        function trackSelection(layerId, /* function */ onUpdateLayerSelection){
+           require([ "dojo/when","esri-maps-sf/bisprovider/BisProviderRemoter", 
+              "dojo/domReady!"], 
+              function(when, Remoter)  {
+                  when(Remoter.trackLayerSelection(layerId),
+                   function(selection){
+                       onUpdateLayerSelection(layerId, selection.join(','), true);
+                   },
+                   function(err){
+                       onUpdateLayerSelection(layerId, '', false);
+                   }
+               );
+                  
+           });
+        }
+        
+        function subscribeEMFTopics(/* function */ onAddLayer, /* function */ onRemoveLayer, /* function */ onUpdateLayerSelection, /* function */ onMapDirty, /* function */ onReorderLayers, /* function */ onRenameLayer){
+           require(["dojo/topic", "esri-maps-sf/bisprovider/BisProviderRemoter"],  function(topic, Remoter)  {
+            // Listening to layer events to populate map layers dropdown
+            var hLayerChange = topic.subscribe("esri-maps-sf/layer-changed", function(event) {
+                var action = event.action;
+                if (action === "Move") {
+                    onReorderLayers(event.newItems.join(",")); 
+                }
+                else if (action === "Rename") {
+                    onRenameLayer(event.newItems[0].id, event.newItems[0].label);
+                }
+                else {  // add or remove
+	                var layerItem = (action === "Add") ? event.newItems[0] : event.oldItems[0];
+	                if (layerItem) {
+	                    if (action === "Add") {
+
+	                        onAddLayer(
+	                            layerItem.id, 
+	                            layerItem.label, 
+	                            layerItem.tableId, 
+	                            layerItem.viewId || null, 
+	                            (layerItem.fieldIds && layerItem.fieldIds.join(",")) || "",
+	                            layerItem.cluster !== true // supports selection
+	                        );
+	                    }
+	                    else {
+	                        onRemoveLayer(layerItem.id, layerItem.label);
+	                    }
+	                }
+                }
+            });
+            
+            // track layer selection
+            var hLayerSelection = topic.subscribe("esri-maps-sf/layer-selection", function(event) {
+                if (Remoter.isSelectionTrackingLayer(event.layerId)){
+                    onUpdateLayerSelection(event.layerId, event.selection.join(','), true);  
+                }
+            });
+
+            // track map dirty to toggle dirty state
+            //var hMapDirty = topic.subscribe("esri-maps-sf/map-dirty", function(event){
+            //    setMapDirtyFlag(true, onMapDirty);
+            //});
+            
+           });
+        }
+        
+        function setMapDirtyFlag(/* bool */ isDirty, /* function */onMapDirty){
+            // Wire windows unload
+            onMapDirty(isDirty);
+            
+            if (isDirty){
+                window.addEventListener("beforeunload", onbeforeUnloadListener);
+            }
+            else {
+                window.removeEventListener("beforeunload", onbeforeUnloadListener);
+            }
+        }
+        
+        
+        var onbeforeUnloadListener = function(e){
+        var confirmationMessage = "If you leave this page, unsaved changes to the map will be lost. To keep your changes, click Stay on this page and save the map.";        
+            e = e || window.event;
+            if(e)
+            {
+             e.returnValue = confirmationMessage;     //Gecko + IE}
+           
+             }
+             return confirmationMessage;   //Webkit, Safari, Chrome etc.
+        }
+        
+         //close map onclick function 
+         //--The behavior is different between "write js code in apex page directly" and "write js code here, invoke function name on apex page"
+          function closeMap()
+         {
+             window.removeEventListener("beforeunload", onbeforeUnloadListener);
+             if(!confirm('Are you sure to close the map?. To preserve your changes, select Cancel to stay on this page and click Save.')) 
+              { 
+              window.addEventListener("beforeunload", onbeforeUnloadListener); 
+                return false;
+                 
+              } 
+             return true; 
+         } 
+
+        function initContainer(
+            /* String   */ mapDomId,
+            /* String   */ mapName,
+            /* String   */ mapDescription,
+            /* bool     */ canSaveMap,
+            /* function */ onMapReady, 
+            /* function */ onAddLayer, 
+            /* function */ onRemoveLayer, 
+            /* function */ onUpdateLayerSelection, 
+            
+            /* function */ onReorderLayer, 
+            /* function */ onRenameLayer, 
+            
+            /* function */ onMapDirty
+            
+            ){
+
+         require([
+                "dojo/dom-class", "dojo/dom-style", //"dojo/_base/window", "dojo/window", 
+                "dojo/parser", "dojo/topic",
+                "esri-maps-sf/bisprovider/BisProviderRemoter",
+                "dijit/layout/BorderContainer", "dijit/layout/ContentPane", //"dojox/layout/ToggleSplitter", 
+                "dojo/domReady!"
+            ], function(domClass, domStyle, //_win, win, 
+                    parser, topic, Remoter) {
+                
+                // Initialize dojo bordercontainer and layout
+                //var viewPort = win.getBox();                
+                // TODO: Can we make bordercontainer height to 100%, set bottom panel height and splitter based on hide/show table
+                domStyle.set('bcBottom', { opacity: 1 });
+                parser.parse();
+                
+                // Listening to map events for VF page components
+                var hReady = null;
+                hReady = topic.subscribe("esri-maps-sf/map-ready", function(mapId) {
+           
+                    if (hReady) {
+                        hReady.remove();
+                    }
+                    // Cancel auto-recover map
+                    // Start auto recover if save this is allowed
+                    // if (!Remoter.mapDirtyFlag && canSaveMap) {
+                    //     startAutoRecover();
+                    //  } 
+                    
+                    //no matter new map or old map, add an Eventlistener(pop up "stay/leave" message when user leave current page)
+                    // if (!Remoter.controllerParams.id) {
+                        // no ID = new map - always prompt to save when navigated away
+                        
+                        // TODO: Why IE(10) is getting the prompt twice when chose to stay!?
+                        
+                        if(canSaveMap) //if user have save permission
+                        {
+                        window.addEventListener("beforeunload", onbeforeUnloadListener);
+                        }
+                   
+                    subscribeEMFTopics(onAddLayer, onRemoveLayer, onUpdateLayerSelection, onMapDirty, onReorderLayer, onRenameLayer);   
+                    
+                    // Ready
+                    onMapReady(Remoter.mapDirtyFlag === true);  
+                });
+                
+                loadJazz(mapDomId, mapName, mapDescription);
+            });
+        }
+    </script>
+
+
+</apex:component>

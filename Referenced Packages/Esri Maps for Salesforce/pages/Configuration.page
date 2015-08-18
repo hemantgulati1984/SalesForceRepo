@@ -1,0 +1,36 @@
+<apex:page setup="true" wizard="false" controller="esrimaps.EsriMapsConfiguration">
+	
+	<apex:sectionHeader title="Esri Maps for Salesforce" subtitle="Configurations" 
+	                    description=""/>
+	
+    
+    <c:AuthenticationComponent varConnectAsOrganization="true" />
+    <script>
+       checkOAuthURLResponse();
+    </script>
+    
+    <apex:form >
+		<apex:pageBlock mode="edit" title="Administrative Settings">
+            <apex:pageblockButtons location="top" > 
+ 				<apex:commandButton rendered="{!canChangeWebRoot}" value="Save" action="{!save}" rerender="msgPanel" /> 
+ 			</apex:pageblockButtons> 
+
+			<apex:pageBlockSection columns="1" showHeader="false" title="Administrative Settings" collapsible="false" >
+			    <apex:outputPanel id="msgPanel">
+			        <apex:pageMessage severity="confirm" rendered="{!showSaveMessage}" strength="1" 
+			                          summary="Your configurations have been successfully saved."/>      
+			    </apex:outputPanel>
+			    <apex:inputField value="{!esriMapsConfig.esrimaps__EsriMapsWebRoot__c}" style="width:90%" required="true" rendered="{!canChangeWebRoot}" />
+			    <apex:inputField value="{!esriMapsConfig.esrimaps__Proxy__c}" style="width:90%" required="true" rendered="{!canChangeWebRoot}" />
+				<apex:outputText value="{!esriMapsConfig.esrimaps__EsriMapsWebRoot__c}" rendered="{!NOT(canChangeWebRoot)}" />
+                <apex:outputText value="{!esriMapsConfig.esrimaps__Proxy__c}" rendered="{!NOT(canChangeWebRoot)}" /> 
+			</apex:pageBlockSection>
+
+			<apex:pageBlockSection columns="1" title="About" collapsible="true">
+				<apex:outputPanel >
+				The license agreement can be found&nbsp;<apex:outputLink target="_blank" value="http://www.esri.com/legal/software-license">here</apex:outputLink>.
+				</apex:outputPanel>
+			</apex:pageBlockSection>
+		</apex:pageBlock>
+    </apex:form>
+</apex:page>

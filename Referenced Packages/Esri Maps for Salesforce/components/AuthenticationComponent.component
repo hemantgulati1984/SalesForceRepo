@@ -1,0 +1,485 @@
+<apex:component controller="esrimaps.AuthenticationController" allowDML="true" >
+    <apex:attribute name="varConnectAsOrganization" default="false" 
+                    type="Boolean" assignTo="{!isOrganizationConnection}" 
+                    description="" />
+
+    <style>
+        
+        .agolAvator {           
+            background-repeat: no-repeat; 
+            background-position: center;
+            background-size: 100% auto;
+            width: 100px;
+            height: 100px;
+        }
+        .sfLoading {
+            background-image:url(/img/loading.gif); 
+            background-repeat: no-repeat; 
+            background-position: center;
+            width: 100%;
+            height: 100%; 
+        }
+        .popupBg {
+           background-color:black;
+           opacity: 0.60;
+           filter: alpha(opacity = 60);
+           position: absolute;
+           width: 100%;
+           height: 100%;
+           top: 0;
+           left: 0;
+            
+        }
+        
+        .popupContainer {
+           position: absolute;
+           width: 100%;
+           height: 100%;
+           top: 0;
+           left: 0;
+           z-index: 70;   
+        }
+        .mapChartGalleryContainer {
+                position: relative;
+                display: inline-block;
+                float: left;
+                margin: auto;
+                text-overflow: ellipsis;
+                height:102px;
+                width: 320px;
+                overflow: hidden;
+                cursor: pointer;
+                border: 2pt solid lightgray;
+                background-color:#CFEEF8;
+            }
+            
+             .mapChartGalleryContainer:hover {        
+            background-color:#B9DFEB;
+        }
+            .titleDisplay
+            {
+             top: 3px; 
+             left: 10px;
+             float: left;
+             width: 60%;
+             height: 25%;
+             font-size: 13px; 
+             position: absolute; 
+             text-align: left;
+             font-weight: 700;
+             color:#505F62;   
+            }
+            .textDisplay
+            {
+             left: 10px;
+             top: 27px; 
+             float: left;
+             width: 60%;
+             height:70%;
+             font-size: 12px;
+             position: absolute;
+             text-align: left;
+             vertical-align: baseline;
+             color:#4B4B4D;
+            }
+            .imageDisplay
+            {
+            margin-top:13px; 
+            display:block; 
+            float: right;
+            height: 65px;
+            width: 65px; 
+            right:10px;
+            position: absolute;
+            }
+            
+        .popupCenter {
+           background-color: transparent;
+           position: absolute;
+           top: 25px; 
+           width: 600px;
+           left: 50%;
+           margin-left: -300px;
+           overflow: auto;  
+        }
+        .colQuarter {
+            width: 25%;
+        }
+        .colStyle {
+            width: 50%;
+            text-align: center;
+        }
+        .colCenter {
+            text-align: center;
+        }
+        .colWideStyle {
+            width: 90%;
+        }
+        .colNarrowStyle {
+            width: 10%;
+        }
+        
+        .linkSpan {
+            text-decoration: none;
+        }
+    </style>
+
+    
+    <apex:form id="formAuthentication">
+        
+        <!-- Action function declarations -->
+        <apex:actionFunction name="actionFunc_showChangeUrl" action="{!showChangeURL}" 
+                             rerender="popupChangeURL,debug">
+        </apex:actionFunction>
+
+	    <apex:actionFunction name="actionFunc_OnCompleteValidation" action="{!completeUrlValidation}" 
+	                         rerender="msgError,popupChangeURL,overlaySpinning,debug">
+            <!-- <apex:param value="" name="paramPortalUrl"></apex:param> -->
+	    </apex:actionFunction>
+	    <apex:actionFunction name="actionFunc_checkOAuthResponse" action="{!checkOAuthResponse}"
+	                         status="statusLoading"
+	                         rerender="popupConfirmChangeURL,pbUserInfo,pbOrgInfo,pbOrgInfoButtons,pbUserInfoButtons,pbLinks,debug">
+	    </apex:actionFunction>
+	    <!-- navigate page to  Workflowtab-->
+	     <apex:actionFunction name="actionFunc_gotoWorkflowtab" action="{!URLFOR($Action.GeoenableWorkflow__c.tab, $ObjectType.GeoenableWorkflow__c)}" 
+                             rerender="{!$ObjectType.esrimaps__GeoenableWorkflow__c.Createable}">
+        </apex:actionFunction>
+        <!-- navigate page to  MapGallerytab-->
+	     <apex:actionFunction name="actionFunc_gotoMaptab" action="{!URLFOR($Action.Visualization__c.tab, $ObjectType.Visualization__c)}" 
+                             rerender="{!$ObjectType.esrimaps__Visualization__c.Accessible}">
+        </apex:actionFunction>
+        <!-- navigate page to  DataTemplatetab-->
+	     <apex:actionFunction name="actionFunc_gotoDataTemplatetab" action="{!URLFOR($Action.BisLayerInfo__c.tab, $ObjectType.BisLayerInfo__c)}" 
+                             rerender="{!$ObjectType.esrimaps__BisLayerInfo__c.Createable}">
+        </apex:actionFunction>
+	    
+	    <!-- UI for AGOL Account Info -->
+	    <apex:outputPanel >
+           <apex:actionstatus id="statusLoading">            
+	           <apex:facet name="start">
+		           <apex:pageBlock title="{!IF(isOrganizationConnection, 'Getting Started', TRIM($User.FirstName + ' ' + $User.LastName))}" mode="edit" 
+		                  helpTitle="Learn more" helpurl="http://links.esri.com/maps-for-salesforce-help">
+		               <apex:pageBlockSection columns="1" showHeader="true" title="Connect Salesforce to Esri Maps">
+		                <apex:pageBlockSectionItem ><apex:outputPanel >Esri Maps for Salesforce is powered by ArcGIS. With Esri Maps, you can integrate geography with existing business systems and processes.</apex:outputPanel></apex:pageBlockSectionItem>
+		               </apex:pageBlockSection>   
+		               <apex:outputPanel layout="block" style="height: 80px; ">
+		                  <apex:panelGrid columns="2" cellpadding="2" style="margin-top: 20px; margin-left: auto; margin-right: auto; text-align: center; vertical-align: middle;">
+		                       <apex:image value="/img/loading.gif" />
+		                       <apex:outputPanel >Please wait...</apex:outputPanel>
+		                  </apex:panelGrid>
+		               </apex:outputPanel>
+		           </apex:pageBlock>
+			   </apex:facet>
+		       <apex:facet name="stop">
+
+		           <apex:pageBlock title="{!IF(isOrganizationConnection, 'Getting Started', TRIM($User.FirstName + ' ' + $User.LastName))}" mode="edit" id="pbUserInfo" 
+				                   helpTitle="Learn more" helpurl="http://links.esri.com/maps-for-salesforce-help">
+				                           
+		               <apex:pageBlockButtons location="top" id="pbUserInfoButtons" rendered="true">
+		                    <!-- $Organization.Name -->
+		                    <apex:commandButton value="Edit Connection" rendered="{!isOrganizationConnection && isSignedIn}"
+		                                        rerender="popupChangeURL,debug" action="{!showChangeURL}"/>
+		                </apex:pageBlockButtons>
+		
+		                <!-- Organization login only -->
+		                <apex:pageBlockSection columns="1" collapsible="false" showHeader="true" 
+		                                       title="Connect Salesforce to Esri Maps"
+		                                       rendered="{!isOrganizationConnection}">
+		                                       
+                            
+		                    <apex:pageBlockSectionItem >
+		                        <apex:outputText >Esri Maps for Salesforce is powered by ArcGIS. With Esri Maps, you can integrate geography with existing business systems and processes.</apex:outputText>
+		                    </apex:pageBlockSectionItem>
+		                    
+		                    <!-- Error indicating previous registration has become invalid -->
+                            <apex:pageBlockSectionItem rendered="{!NOT(isSignedIn)}">
+                                <apex:pageMessage title="Action Required"
+                                                  rendered="{!NOT(ISBLANK($Setup.Configuration__c.OAuthAppId__c))}"
+                                                  summary="Failed to connect using the previously configured settings."
+                                                  severity="error" strength="2" />
+                            </apex:pageBlockSectionItem>   
+		                    <apex:panelGrid rendered="{!NOT(isSignedIn)}" columns="1" columnClasses="colCenter" 
+		                                    style="margin-left: auto; margin-right: auto;" >
+
+		                        <apex:commandButton value="{!IF(ISBLANK($Setup.Configuration__c.OAuthAppId__c), 'Setup Connection' , 'Fix Connection')}" 
+		                                            rendered="{!isOrganizationConnection}"
+		                                            rerender="popupChangeURL,debug" action="{!showChangeURL}"/>
+
+                                <apex:panelGrid columns="4" cellpadding="2" style="margin-left: auto; margin-right: auto;">
+                                    <apex:image value="/img/msg_icons/info16.png" />
+                                    <apex:outputLink styleClass="linkSpan" target="_blank" value="{!PortalUrl}/home/troubleshoot.html">Need help signing in?</apex:outputLink>
+                                    <apex:outputText value=" | " />
+                                    <apex:outputLink styleClass="linkSpan" target="_blank" value="{!PortalUrl}/features/free-trial.html">Don't have an account?</apex:outputLink>
+                                </apex:panelGrid>
+                                
+		                    </apex:panelGrid>
+		                    
+			                <apex:pageBlockSectionItem rendered="{!isSignedIn}">
+			                   <apex:outputLabel value="ArcGIS Connection" />
+			                   <apex:panelGrid columns="2" cellpadding="2">
+			                       <apex:image value="/img/msg_icons/confirm16.png" />
+			                       <apex:outputLink target="_blank"
+			                                        value="{!$Setup.Configuration__c.PortalConnection__c}" >{!$Setup.Configuration__c.PortalConnection__c}</apex:outputLink>                          
+		
+			                   </apex:panelGrid>
+			                </apex:pageBlockSectionItem>
+			                <!-- 
+			                <apex:pageBlockSectionItem rendered="{!isSignedIn}">
+			                     <apex:outputLabel value="" />
+				                 <apex:commandButton value="Edit Connection" rendered="{!isOrganizationConnection && isSignedIn}"
+	                                                 rerender="popupChangeURL,debug" action="{!showChangeURL}"/>
+			                </apex:pageBlockSectionItem>
+		                    -->
+		               </apex:pageBlockSection>
+		                   
+		               <!-- User login only -->
+		               <apex:pageBlockSection columns="1" title="Connect Salesforce to Esri Maps" rendered="{!NOT(isOrganizationConnection)}" >
+		                    <apex:pageBlockSectionItem >
+		                        <apex:outputPanel rendered="{!NOT(isSignedIn)}">
+		                                <apex:pageMessage title="Public Account" 
+		                                                  rendered="{!NOT(isValidPortalUser)}"
+		                                                  summary="This is a public account. Please use an account which is a member of an organization to sign in."
+		                                                  severity="warning" strength="2" />
+		                                <apex:pageMessage title="Unable to Sign In" 
+                                                          rendered="{!NOT(isValidAppId)}"
+                                                          summary="Incomplete configuration information. Please contact your Salesforce administrator to complete the Esri Maps for Salesforce configurations."
+                                                          severity="Error" strength="2" />
+		                                
+		                        </apex:outputPanel>
+		                    </apex:pageBlockSectionItem>
+		                   
+		                    <apex:pageBlockSectionItem >
+		                        <!-- Avator and account name -->
+		                        <apex:outputPanel >
+		                            <apex:image styleClass="agolAvator" 
+		                                        value="{!BLANKVALUE(portalInfo.user.thumbnailFullPath, SalesforceRoot + '/components/widgets/common/images/no-user-thumb.jpg')}" />
+		                            
+		                            <apex:outputPanel layout="block">{!portalInfo.user.fullName}</apex:outputPanel>
+		                        </apex:outputPanel>
+		                        
+		                        <apex:pageBlockSection columns="1" showHeader="false" collapsible="false" >
+		                            <!-- Signed In -->
+		                            <apex:pageBlockSectionItem rendered="{!isSignedIn}">
+		                                <apex:outputLabel value="Currently connected to" />
+		                                <apex:outputPanel >
+		                                    <apex:outputPanel layout="block">{!portalInfo.name}</apex:outputPanel>
+		                                    <apex:outputLink value="{!portalInfo.organizationUrl}" target="_blank">{!portalInfo.organizationUrl}</apex:outputLink>
+		                                </apex:outputPanel>
+		                            </apex:pageBlockSectionItem>
+		
+		                            <!-- NOT Signed In -->
+		                            <apex:pageBlockSectionItem rendered="{!NOT(isSignedIn)}">
+		                                <apex:outputLabel value="ArcGIS Connection" />
+		                                <apex:outputLink rendered="{!NOT(isSignedIn)}"
+		                                                 value="{!BLANKVALUE($Setup.Configuration__c.PortalConnection__c, 'https://www.arcgis.com')}" target="_blank">{!BLANKVALUE($Setup.Configuration__c.PortalConnection__c, 'https://www.arcgis.com')}</apex:outputLink>                       
+		                            </apex:pageBlockSectionItem>
+		                            
+		                            <apex:pageBlockSectionItem >
+		                                <apex:outputLabel value="" />
+		                                <apex:commandButton value="{!IF(isSignedIn, 'Sign Out', 'Sign In')}" rendered="{!NOT(isOrganizationConnection)}"
+		                                        disabled="{!NOT(isValidAppId)}"
+		                                        rerender="pbUserInfo,pbLinks,pbUserInfoButtons" action="{!showOAuthSignin}"/>
+		                            </apex:pageBlockSectionItem>
+		
+		                        </apex:pageBlockSection>
+		
+		                    </apex:pageBlockSectionItem>
+		                    
+		                </apex:pageBlockSection>
+		               
+		               <!--  Getting Started Links -->
+			           <apex:pageBlockSection title="{!IF(isOrganizationConnection,'Spatially Enable Your Salesforce Data', 'Getting Started')}" columns="3" id="pbLinks"  rendered="{!isSignedIn}">
+		                   <!-- https://developer.salesforce.com/forums/ForumsMain?id=906F0000000976wIAA -->
+			               <apex:panelGrid columns="2" styleclass="mapChartGalleryContainer" rendered="{!$ObjectType.esrimaps__Visualization__c.Accessible}" onclick="actionFunc_gotoMaptab()" >
+			                <apex:panelGrid columns="1">
+			                 <apex:outputText styleclass="titleDisplay" value="{!$ObjectType.esrimaps__Visualization__c.LabelPlural}"/>
+			                 <apex:outputText styleclass="textDisplay" value="View or create maps for visualizing and analyzing your Salesforce data."/>
+			                 </apex:panelGrid>
+			                 <apex:image styleclass="imageDisplay" value="{!URLFOR($Resource.esrimaps__EsriMapsMapGallery)}" width="70" height="70" />
+			               </apex:panelGrid>
+			              
+			               <apex:panelGrid columns="2" styleclass="mapChartGalleryContainer" rendered="{!$ObjectType.esrimaps__BisLayerInfo__c.Createable}" onclick="actionFunc_gotoDataTemplatetab()" >
+			                <apex:panelGrid columns="1">
+			                 <apex:outputText styleclass="titleDisplay" value="{!$ObjectType.esrimaps__BisLayerInfo__c.LabelPlural}"/>
+			                 <apex:outputText styleclass="textDisplay" value="Streamline the mapping process by predefining location information and display fields for Salesforce objects."/>
+			                 </apex:panelGrid>
+			                 <apex:image styleclass="imageDisplay" value="{!URLFOR($Resource.esrimaps__EsriMapsDataLayer)}" width="70" height="70" />
+			               </apex:panelGrid>
+			               
+			               <apex:panelGrid columns="2" styleclass="mapChartGalleryContainer" rendered="{!$ObjectType.esrimaps__GeoenableWorkflow__c.Createable}" onclick="actionFunc_gotoWorkflowtab()" >
+			                <apex:panelGrid columns="1">
+			                 <apex:outputText styleclass="titleDisplay" value="{!$ObjectType.esrimaps__GeoenableWorkflow__c.LabelPlural}"/>
+			                 <apex:outputText styleclass="textDisplay" value="Spatially enable your customer records with workflows that find the geographic coordinates of addresses."/>
+			                 </apex:panelGrid>
+			                 <apex:image styleclass="imageDisplay" value="{!URLFOR($Resource.esrimaps__EsriMapsWorkflowGallery)}" width="70" height="70" />
+			               </apex:panelGrid>
+      
+			           </apex:pageBlockSection>
+		
+			           
+		           </apex:pageBlock>
+			  </apex:facet>
+            </apex:actionstatus>
+        </apex:outputPanel>
+        
+        <!-- Popup - Organization only, Save URL and AppId/AppSecret changes -->
+        <apex:outputPanel id="popupConfirmChangeURL">
+            <apex:outputPanel styleClass="popupContainer" layout="block" 
+                              rendered="{!AND(isOrganizationConnection, showAppIdEdit)}">
+                  <apex:outputPanel styleClass="popupBg" layout="block"></apex:outputPanel>
+                  <apex:outputPanel styleClass="popupCenter" layout="block">
+                      
+                      <apex:pageBlock title="Edit Connection" mode="edit" >
+	                      <apex:pageBlockButtons location="bottom" >
+	                          <apex:commandButton action="{!showOAuthSignin}" rendered="{!NOT(isValidPortalUser)}" 
+	                                              value="Sign in" />
+	                          
+	                          <apex:commandButton action="{!validateAndSave}" value="Save and Close" 
+	                                              rendered="{!isValidPortalUser}"
+	                                              status="statusSaving"
+	                                              rerender="popupChangeURL,popupConfirmChangeURL,pbUserInfo,debug"
+	                                              />
+	 
+	                          <apex:commandButton action="{!reloadPage}" value="Cancel"
+	                                              rerender="popupChangeURL,popupConfirmChangeURL,debug"
+	                                              immediate="true"/>
+	                      </apex:pageBlockButtons>
+	                      <apex:pageBlockSection columns="1">
+	                         <apex:pageMessage rendered="{!NOT(isValidPortalUser)}" 
+	                                           summary="{!IF(ISBLANK(portalInfo.user.orgId), 'This is a public account. Please use an account which is a member of an organization to sign in.', 'Please use an account with administrative privileges in the organization to sign in.')}" 
+	                                           severity="error" strength="1" />
+	                                   
+	                         <apex:pageBlockSectionItem >
+	                            <apex:outputLabel value="ArcGIS Connection" />
+	                            <apex:panelGrid columns="2" width="100%" columnClasses="colWideStyle,colNarrowStyle" cellpadding="2" >
+	                               <apex:panelGrid columns="1">
+	                                   <apex:outputText value="{!portalInfo.name}" rendered="{!NOT(ISBLANK(portalInfo.name))}"  />
+	                                   <apex:outputLink value="{!IF(ISBLANK(portalInfo.organizationUrl), url, portalInfo.organizationUrl)}" 
+                                                        target="_blank">{!IF(ISBLANK(portalInfo.organizationUrl), url, portalInfo.organizationUrl)}</apex:outputLink>
+	                               </apex:panelGrid>
+	                               
+	                               <apex:image value="/img/msg_icons/confirm16.png" />
+                                   
+	                            </apex:panelGrid>
+	                         </apex:pageBlockSectionItem>  
+	
+		                     <apex:pageBlockSectionItem >
+	                            <apex:outputLabel value="User Account" />
+	                            <apex:panelGrid columns="2" width="100%" columnClasses="colWideStyle,colNarrowStyle" cellpadding="2" >
+	                               <apex:outputText value="{!portalInfo.user.fullName}" />
+	                               <apex:panelGroup >
+	                                   <apex:image value="{!IF(isValidPortalUser, '/img/msg_icons/confirm16.png' ,'/img/msg_icons/error16.png')}" />
+
+	                               </apex:panelGroup>
+	                            </apex:panelGrid>
+	                         </apex:pageBlockSectionItem> 
+	                      
+	                         
+	                       </apex:pageBlockSection> 
+
+	                       <apex:pageBlockSection columns="1" showHeader="false">
+	                        <apex:pageBlockSectionItem rendered="{!isValidPortalUser && NOT(isValidAppId)}" >
+                                <apex:pageMessage summary="Error connecting to ArcGIS." severity="error" strength="1" />
+                            </apex:pageBlockSectionItem>
+                            <apex:actionstatus id="statusSaving" >
+                               <apex:facet name="start">
+                                   <apex:outputPanel >
+                                       <div class="waitingSearchDiv" style="height: 100%;width:100%;"></div>
+                                       <apex:image value="/img/loading.gif" />
+                                       <apex:outputPanel >Saving connection...</apex:outputPanel>
+                                   </apex:outputPanel>
+                               </apex:facet>
+                             </apex:actionstatus>
+                        </apex:pageBlockSection>
+                      </apex:pageBlock>
+                  </apex:outputPanel>
+             </apex:outputPanel>
+        </apex:outputPanel>
+        
+        <!--  Popup - Organization only, Change URL and then Sign in -->
+	    <apex:outputPanel id="popupChangeURL">
+			<apex:outputPanel styleClass="popupContainer" layout="block" rendered="{!showUrlEdit}">
+			      <apex:outputPanel styleClass="popupBg" layout="block"></apex:outputPanel>
+			      <apex:outputPanel styleClass="popupCenter" layout="block">
+			          <apex:pageBlock title="Edit Connection" mode="edit">
+			             <apex:pageBlockButtons location="bottom" id="pbButtonsChange">
+			                 <apex:commandButton action="{!startUrlValidation}" value="Sign in" 
+			                                     rendered="{!NOT(continueSignin)}"
+			                                     rerender="overlaySpinning,msgError,pbButtonsChange,debug"
+			                                     oncomplete="validateUrl('{!url}');"/>
+	
+                                                 
+			                 <apex:commandButton action="{!cancelChangeURL}" value="Cancel"
+			                                     rerender="popupChangeURL,debug"
+                                                 immediate="true"/>
+			             </apex:pageBlockButtons>
+			             <apex:pageBlockSection columns="1" id="pbEditInfo">
+                             <apex:outputPanel id="msgError">
+	                             <apex:pageMessage rendered="{!NOT(isApexCalloutAllowed)}"
+	                                 title="Unable to connect" 
+	                                 summary="Please check Setup->Security->Remote site settings, and make sure it is accessible by Salesforce." 
+	                                 severity="error" strength="2" />
+                             </apex:outputPanel>
+
+                            <apex:pageBlockSectionItem >
+                                <apex:outputPanel >Please sign in to your ArcGIS Online organization as an administrator.</apex:outputPanel>
+                             </apex:pageBlockSectionItem> 
+			                 <apex:pageBlockSectionItem >
+                                 <apex:outputLabel value="ArcGIS Connection" />
+                                 <apex:panelGrid columns="2" width="100%" columnClasses="colWideStyle,colNarrowStyle" cellpadding="2" >
+                                    <apex:inputText label="URL" value="{!url}" required="true" style="width: 100% !important;" />
+                                    <apex:panelGroup >
+                                        <apex:image value="/img/msg_icons/confirm16.png" rendered="{!isApexCalloutAllowed && continueSignin}"/>
+                                    </apex:panelGroup>
+                                 </apex:panelGrid>
+                             </apex:pageBlockSectionItem>  
+                                
+                             
+                             <apex:pageBlockSectionItem >
+	                             <apex:outputLabel value="" />
+	                             <apex:panelGrid columns="4" cellpadding="2" >
+	                                 <apex:image value="/img/msg_icons/info16.png" />
+	                                 <apex:outputLink styleClass="linkSpan" target="_blank" value="{!PortalUrl}/home/troubleshoot.html">Need help signing in?</apex:outputLink>
+	                                 <apex:outputText value=" | " />
+	                                 <apex:outputLink styleClass="linkSpan" target="_blank" value="{!PortalUrl}/features/free-trial.html">Don't have an account?</apex:outputLink>
+	                             </apex:panelGrid>
+                             </apex:pageBlockSectionItem>
+			             </apex:pageBlockSection>
+                         
+			             <apex:pageBlockSection columns="1">
+			                 <apex:outputPanel id="overlaySpinning">
+			                    <apex:outputPanel rendered="{!isValidating}" >
+			                        <div class="waitingSearchDiv" style="height: 100%;width:100%;"></div>
+			                        <apex:image value="/img/loading.gif" />
+			                        <apex:outputPanel >Connecting...</apex:outputPanel>
+			                    </apex:outputPanel>
+			                </apex:outputPanel>
+			             </apex:pageBlockSection>
+			          </apex:pageBlock>
+	              </apex:outputPanel>
+	        </apex:outputPanel>
+        </apex:outputPanel>
+    </apex:form>
+
+        
+    <script>
+        function validateUrl(/* String */ testUrl){
+            // TODO: Use emf infrastructure (proxy iFrame) to tell if URL is AGOL org, 
+            //       OAuth, IWA/PKI, Portal, etc.
+            
+            // Simple check URL www.arcgis.com, qaext.arcgis.com, devext.arcgis.com, dev.arcgis.com 
+            // *.maps.arcgis.com, *.mapsqa.arcgis.com. *.mapsdevext.arcgis.com, *.mapsdev.arcgis.com
+            actionFunc_OnCompleteValidation();
+        }
+        
+        function showChangePortalUrl(){
+            actionFunc_showChangeUrl();
+        }
+        
+        function checkOAuthURLResponse(){
+            actionFunc_checkOAuthResponse();
+        }
+
+    </script>
+
+</apex:component>

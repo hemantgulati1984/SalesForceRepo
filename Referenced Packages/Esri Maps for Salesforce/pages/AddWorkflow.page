@@ -1,0 +1,19 @@
+<apex:page standardController="esrimaps__GeoenableWorkflow__c" 
+		   extensions="esrimaps.BisProviderControllerExtension">
+	 <apex:sectionHeader title="Esri Maps" subtitle="New Workflow"  />
+	<apex:variable var="varPermissions" 
+				   value="{!AND($ObjectType.GeoenableWorkflow__c.Createable,
+				   		   $ObjectType.GeoenableWorkflow__c.fields.GenerateFeatures__c.Accessible,
+    					   $ObjectType.GeoenableWorkflow__c.fields.ShapeOutputLookup__c.Accessible,
+    					   $ObjectType.GeoenableWorkflow__c.fields.Name.Accessible,
+    					   $ObjectType.GeoenableWorkflow__c.fields.PrimaryObjectType__c.Accessible,
+    					   $ObjectType.GeoenableWorkflow__c.fields.PublishParameters__c.Accessible)}" />
+    <apex:outputPanel rendered="{!NOT(IsConfigurationValid)}">
+	    <apex:pageMessage title="Connect Salesforce to Esri Maps" 
+	                      summary="Incomplete configuration information. Please contact your Salesforce administrator to complete the Esri Maps for Salesforce configurations."
+	                      
+	                      severity="Error" strength="2" />
+	                      <!-- Link to the Configuration Page? How to check permission!? -->
+    </apex:outputPanel>					   
+	<c:AddWorkflowComponent varPermissions="{!varPermissions}" rendered="{!IsConfigurationValid}"/>
+</apex:page>

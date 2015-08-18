@@ -1,0 +1,75 @@
+<apex:page extensions="esrimaps.BisProviderControllerExtension"  standardController="DashboardComponent" >
+ 	<!-- Check JSON storage permission -->
+    <apex:form >
+	<apex:sectionHeader title="Dashboard Map Component Edit" subtitle="Esri Maps" />
+	
+   	<!--  Permission check for Accessible  -->
+   	<apex:variable var="varConfig" 
+                   value="{!AND($ObjectType.Visualization__c.Accessible,
+                                $ObjectType.Storage__c.Createable, 
+                                $ObjectType.Storage__c.Deletable,
+                                $ObjectType.Storage__c.fields.JSON__c.Createable,
+                                $ObjectType.Storage__c.fields.Key__c.Createable
+                    )}"     
+    />
+
+	<apex:outputPanel rendered="{!NOT(varConfig)}">
+		<apex:pageMessage severity="WARNING" strength="2"
+						  summary="Insufficient privileges to configure this dashboard component." />
+	</apex:outputPanel>
+		
+    <apex:pageBlock title="Dashboard Map Component Edit" mode="edit" >
+    	<apex:pageblockButtons >
+    		<apex:commandButton value="Save" action="{!saveDashboardMap}" disabled="{!NOT(varConfig)}"/>
+    		<apex:commandButton value="Cancel" action="{!returnToDashboard}" immediate="true"/>
+    	</apex:pageblockButtons>
+    	
+    	<apex:pageBlockSection >
+    		<apex:outputField value="{!dashboardcomponent.dashboardId}" />
+    	</apex:pageBlockSection>
+    	
+
+    	<apex:outputPanel rendered="{!varConfig}">
+    	<apex:pageBlockSection title="Select map" collapsible="false" columns="1" id="pbsMap">
+    		<apex:inputField value="{!mapLookup.esrimaps__SourceMap__c}">
+    			<apex:actionSupport event="onchange" action="{!resetMapLookup}" rerender="pbsDataSource"
+    			oncomplete="" />
+    		</apex:inputField>
+    	</apex:pageBlockSection>
+    	<apex:pageBlockSection title="(Optional) Set data source" collapsible="false" columns="1" id="pbsDataSource">
+
+			<apex:pageBlockTable value="{!bislayers}" var="l" id="pb" > 
+	            <apex:column value="{!l.title}" headerValue="Layer Title"/>
+
+	            
+                <apex:column headerValue="Object">
+                    <apex:outputText rendered="{!NOT(l.isAccessible)}" value="-- Unavailable --"/>  <!-- /img/msg_icons/warning16.png or error16.png -->
+                    <apex:outputText rendered="{!l.isAccessible}" value="{!$ObjectType[l.tableId].LabelPlural}"/>
+                </apex:column>
+	           	<apex:column headerValue="View or Filter Criteria">	
+	           		<apex:outputPanel layout="block" rendered="{!l.isAccessible}" >
+	           			
+		           		<apex:selectList style="width: 90%;" value="{!l.viewId}" multiselect="false" size="1" 
+		           		                 rendered="{!l.canSwitchDataView && l.isViewAccessible}" id="pFilter">
+	            			<apex:selectOptions value="{!l.availableViews}" />	  
+	        			</apex:selectList>
+                        <apex:outputText rendered="{!l.canSwitchDataView && NOT(l.isViewAccessible)}" value="-- Unavailable --" />
+	        			<apex:outputText rendered="{!NOT(l.canSwitchDataView)}" value="Data source is controlled by another layer."/>
+	            			
+	           		</apex:outputPanel>
+	                			
+	            </apex:column>
+	            
+            </apex:pageBlockTable>
+            
+            
+    	</apex:pageBlockSection>
+    	</apex:outputPanel>
+    </apex:pageBlock>
+    
+    
+	</apex:form>
+	
+	
+      
+</apex:page>

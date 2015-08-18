@@ -1,0 +1,59 @@
+<!-- Readonly Map used on Dashboard (no save/delete/close buttons, no table pane)-->
+<apex:page standardController="esrimaps__Visualization__c" 
+           extensions="esrimaps.BisProviderGlobalRemoter">
+    <!--  variable used in JavaScript must be declared by itself (i.e. not within form) -->
+    <apex:variable var="varPermission" 
+           value="{!AND($ObjectType.Storage__c.Createable, 
+                        $ObjectType.Storage__c.Deletable,
+                        $ObjectType.Storage__c.fields.JSON__c.Createable,
+                        $ObjectType.Storage__c.fields.Key__c.Createable
+                )}" 
+    />
+    <style>
+        .pending {
+            background-image:url({!$Resource.EsriMapsImageProgress}); 
+            background-repeat: no-repeat; 
+            background-position: center;
+        }
+        
+        .sfLoading {
+            background-image:url(/img/loading.gif); 
+            background-repeat: no-repeat; 
+            background-position: center;
+            width: 100%;
+            height: 100%; 
+        }
+
+    </style>
+    
+    <script>
+        // Setting dojo package paths via controller variables
+        dojoConfig = {
+            async: true,
+            parseOnLoad: false,
+            packages: [
+                { name: "esri-maps-sf", location: "{!JSENCODE(SalesforceRoot)}" }
+            ]
+        };
+    </script>
+
+    <script src="{!JSENCODE(DojoRoot)}" />
+    
+<apex:form id="pageForm">
+    <apex:outputPanel layout="none" rendered="false">{!esrimaps__Visualization__c.Name}{!esrimaps__Visualization__c.esrimaps__Description__c}</apex:outputPanel>         
+    <c:MapViewComponent varPermission="{!varPermission}"
+                        varControllerNamespace="{!SUBSTITUTE(SUBSTITUTE($RemoteAction.BisProviderGlobalRemoter.ping, 'BisProviderGlobalRemoter.ping', ''), '.', '')}" 
+                        varControllerName="{!SUBSTITUTE($RemoteAction.BisProviderGlobalRemoter.ping, '.ping', '')}"
+                        varAGOL="{!PortalUrl}" 
+                        varIsWorkflow="false" 
+                        varReferrer="{!SalesforceRoot}/components/Map.html"/>
+        
+    <!-- Dashboard -->
+    <apex:iframe id="jazzAppDashboard" scrolling="false">
+        <script>
+            loadJazz("jazzAppDashboard", "{!JSENCODE(Visualization__c.Name)}", "{!JSENCODE(Visualization__c.Description__c)}");
+        </script>
+    </apex:iframe>
+
+</apex:form>
+</apex:page>

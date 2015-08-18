@@ -1,0 +1,53 @@
+<apex:page controller="esrimaps.DashboardMapController" >
+	
+	<apex:form rendered="{!$ObjectType.esrimaps__Visualization__c.Accessible}" >	
+	
+	    <apex:variable var="varConfig" 
+	                   value="{!AND($ObjectType.Visualization__c.Accessible,
+	                                $ObjectType.Storage__c.Createable, 
+	                                $ObjectType.Storage__c.Deletable,
+	                                $ObjectType.Storage__c.fields.JSON__c.Createable,
+	                                $ObjectType.Storage__c.fields.Key__c.Createable
+	                    )}"     
+	    />
+
+		<apex:outputPanel id="alwaysHere">
+		
+			<!--  Hint message explaining why map shouldn't be loaded -->
+			<apex:pageMessage rendered="{!(hintMessage != null)}" severity="{!hintSeverity}" strength="2"
+				title="Esri Maps" escape="{!NOT(showConfigureLink)}"
+				detail="{!hintMessage}" />
+		</apex:outputPanel>
+		
+		<!-- Detect what should be displayed on the dashboard  -->
+		<apex:actionFunction name="runDashboard" action="{!init}" rerender="alwaysHere" >
+			<apex:param value="" assignTo="{!topUrl}" name="paramTopUrl"></apex:param>
+			<apex:param value="" assignTo="{!componentId}" name="paramComp"></apex:param>
+			<apex:param value="" assignTo="{!thisPageName}" name="paramPageName"></apex:param>
+			<apex:param value="" assignTo="{!thisPageHeight}" name="paramPageHeight"></apex:param>
+			<apex:param value="" assignTo="{!thisCanConfig}" name="paramHasPermission"></apex:param>
+		</apex:actionFunction>
+		
+		<script>
+			window.onload = function() { 
+				var topUrl = window.document.referrer.split("?")[0];
+				var vfPageName = "{!JSENCODE($CurrentPage.Name)}";
+	
+				// Dashboard component id format = [Vf Page Id][DashboardComponet.Id]
+				// Note this doesn't work if dev mode is on, we may check URL query string "core.apexpages.devmode.url=1"
+				var dashboardCompId = (parent.window.frames[window.name].name); 
+                
+				// Dashboard redirect based on edit state
+				var docHeight = (window.document.documentElement && window.document.documentElement.clientHeight) ||  window.document.height;
+				runDashboard(topUrl, dashboardCompId, vfPageName, docHeight, {!varConfig});
+			};
+
+		</script>
+	</apex:form>
+	
+	<apex:pageMessage rendered="{!NOT($ObjectType.esrimaps__Visualization__c.Accessible)}" severity="WARNING" strength="2"
+				title="Esri Maps" summary="Insufficient Privileges"
+				detail="You do not have the level of access necessary to perform the operation you requested." />
+				
+	
+</apex:page>

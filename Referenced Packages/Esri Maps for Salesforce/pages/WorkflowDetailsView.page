@@ -1,0 +1,237 @@
+<apex:page standardController="esrimaps__GeoenableWorkflow__c" extensions="esrimaps.WorkflowExecuteController">
+	<style>
+		.colLeft {
+			width: 33%;
+			text-align: left;
+			border: none !important;
+		}
+		
+		.colMiddle {
+			width: 34%;
+			text-align: center;
+			border: none !important;
+		}
+		
+		.colRight {
+			width: 33%;
+			text-align: right;
+			border: none !important;
+		}
+		
+		.gridNoBorder {
+		    border: none !important;
+		}
+		.sfLoading {
+            background-image:url(/img/loading.gif); 
+            background-repeat: no-repeat; 
+            background-position: center;
+            width: 100%;
+            height: 100%; 
+        }     
+        .selectedrecord 
+        { 
+        background-color: yellow; 
+        }        
+        .popupBg {
+           background-color:black;
+           opacity: 0.60;
+           filter: alpha(opacity = 60);
+           position: absolute;
+           width: 100%;
+           height: 100%;
+           top: 0;
+           left: 0;
+            
+        }       
+        .popupContainer {
+           position: absolute;
+           width: 100%;
+           height: 100%;
+           top: 0;
+           left: 0;
+           z-index: 70;   
+        }
+         .popupCenter 
+         {
+           background-color: transparent;
+           position: absolute;
+           top: 25px; 
+           width: 600px;
+           left: 50%;
+           margin-left: -300px;
+           overflow: auto;  
+        }
+</style>
+	 <script>
+        function selectAllCheckboxes(obj,receivedInputID){
+            var inputCheckBox = document.getElementsByTagName("input");                  
+            for(var i=0; i<inputCheckBox.length; i++){          
+                if(inputCheckBox[i].id.indexOf(receivedInputID)!=-1){                                     
+                    inputCheckBox[i].checked = obj.checked;
+                }
+            }
+        }
+              
+    </script>
+	<apex:detail inlineEdit="false" > </apex:detail>
+	<apex:pageBlock rendered="{!NOT(isValid)}" title="Run Workflow" mode="edit" >
+	    <apex:pageBlockSection showHeader="false" columns="1">
+		<apex:pageMessage summary="You do not have the level of access necessary to run this workflow."
+		                  strength="2" title="Insufficient Privilege"
+		                  severity="Error"/>
+		
+		
+		<apex:outputText value="Please check the following object and/or field name(s)" />
+		
+        <apex:dataList value="{!invalidMetadataNames}" var="invalidName">
+            <apex:outputText value="{!invalidName}" />
+        </apex:dataList>
+        </apex:pageBlockSection>
+    </apex:pageBlock>
+    <apex:form rendered="{!AND(isValid,
+                           $ObjectType.GeoenableWorkflow__c.fields.GenerateFeatures__c.Accessible,
+    					   $ObjectType.GeoenableWorkflow__c.fields.ShapeOutputLookup__c.Accessible,
+    					   $ObjectType.GeoenableWorkflow__c.fields.Name.Accessible,
+    					   $ObjectType.GeoenableWorkflow__c.fields.PrimaryObjectType__c.Accessible,
+    					   $ObjectType.GeoenableWorkflow__c.fields.PublishParameters__c.Accessible)}">
+    					   
+    					   
+    <!-- User without update permission to GeoenableWorkflow__c will get securityException error if using inputHidden  
+    http://salesforcesolution.blogspot.com/2012/02/systemsecuritynoaccessexception-update.html
+    The problem is with an inputHidden or inputField directly bound to an sobject field that the user doesn't 
+    have access to. 
+     -->
+	<apex:outputField rendered="false" value="{!esrimaps__GeoenableWorkflow__c.esrimaps__GenerateFeatures__c}" />
+	<apex:outputField rendered="false" value="{!esrimaps__GeoenableWorkflow__c.esrimaps__ShapeOutputLookup__c}" />
+	<apex:outputField rendered="false" value="{!esrimaps__GeoenableWorkflow__c.Name}" />
+	<apex:outputField rendered="false" value="{!esrimaps__GeoenableWorkflow__c.esrimaps__PrimaryObjectType__c}" />
+	<apex:outputField rendered="false" value="{!esrimaps__GeoenableWorkflow__c.esrimaps__PublishParameters__c}" />
+
+    <apex:pageBlock title="{!$ObjectType[esrimaps__GeoenableWorkflow__c.esrimaps__PrimaryObjectType__c].LabelPlural}"
+    				rendered="{!$ObjectType[esrimaps__GeoenableWorkflow__c.esrimaps__PrimaryObjectType__c].Accessible}"
+    >     
+          	    
+    	<apex:pageblockButtons location="top" rendered="{!$ObjectType[esrimaps__GeoenableWorkflow__c.esrimaps__PrimaryObjectType__c].Updateable}" >
+    	<apex:commandButton status="fetchStatus" value="Run Workflow" disabled="{!setCon.resultSize = 0}" action="{!runWorkflow}" rerender="msgWorkflows" id="cmdRunWorkflow"/>
+    	</apex:pageblockButtons>   	
+    	<apex:pageMessages id="msgWorkflows"/>
+    	  
+    	<div style="overflow: scroll; height: 350px;">       
+    	<apex:pageBlockTable frame="none" value="{!objects}" var="o" id="pb" > <!-- for var o in controller.getobjects() -->
+            <apex:column >
+            <apex:facet name="header">
+            <apex:inputCheckbox title="Select all on current page" value="{!checkValue}" id="selectall">
+             <apex:actionsupport event="onclick" action="{!getSelected}" onsubmit="selectAllCheckboxes(this,'inputId')" rerender="selectedrecord"/>
+            </apex:inputCheckbox>
+            </apex:facet>
+            <!-- This is our selected Boolean property in our wrapper class -->            
+            <apex:inputCheckbox value="{!o.selected}" id="inputId">
+            <apex:actionsupport event="onclick" action="{!getSelected}" rerender="selectedrecord"/>
+            </apex:inputCheckbox>
+            </apex:column>
+            
+             <!-- [Object]::Name field column as a link to open the record TODO: Hover details -->
+            <apex:column headerValue="{!$ObjectType[esrimaps__GeoenableWorkflow__c.esrimaps__PrimaryObjectType__c].Fields[objectNameField].Label}">
+                <apex:outputLink value="/{!o.obj}" target="_blank">{!o.obj[objectNameField]}</apex:outputLink>
+            </apex:column>
+            
+            <!-- Address input and location output fields -->
+            <apex:repeat value="{!displayFields}" var="f" id="addressCols">
+                <apex:column value="{!o.obj[f]}" />
+            </apex:repeat> 
+            
+            <!-- Header = Dropdown to choose all or missing location records -->
+            <apex:facet name="header">
+                <apex:outputPanel >                     
+	            <apex:outputlabel >Show:&nbsp;</apex:outputlabel>
+	            <apex:selectList value="{!showAllRecords}" multiselect="false" size="1">
+	            <!-- choose views -->          
+	            <apex:selectOptions value="{!showOptions}"/> 
+	            <apex:actionSupport status="fetchStatus" event="onchange" rerender="pb,footPage,cmdRunWorkflow" action="{!refresh}" />
+	            </apex:selectList>
+	            </apex:outputPanel>                          	 
+            </apex:facet>
+           
+           <!--  Footer = page navigation -->
+           
+        </apex:pageBlockTable>	
+        </div>
+         <apex:facet name="footer">
+                <apex:outputPanel id="footPage">
+                  <apex:panelGrid columns="3" rules="none" columnClasses="colLeft,colMiddle,colRight" width="100%"
+                                rowClasses="gridNoBorder" cellpadding="0px" cellspacing="0px"
+                				rendered="{!setCon.resultSize > 0}">
+                	<apex:outputPanel >
+                	<apex:outputlabel id="recordCount">{!1 + ((setCon.pageNumber - 1) * setCon.pageSize)} - {!MIN((setCon.pageNumber * setCon.pageSize), setCon.resultSize)} of {!setCon.resultSize}</apex:outputlabel>
+                    <apex:outputlabel id="space">&nbsp;&nbsp;&nbsp;&nbsp;</apex:outputlabel>
+                    <apex:outputlabel id="selectedrecord" styleClass="selectedrecord"> {!selectedRecords} selected</apex:outputlabel>
+                	<apex:outputlabel id="notemsg">&nbsp;&nbsp;&nbsp;&nbsp;Note: You can only view up to 2000 records at a time.</apex:outputlabel>
+                	</apex:outputPanel>
+
+                	<apex:outputPanel >
+                    <apex:commandButton id="cmbFirst" status="fetchStatus" reRender="pb,popupmsg,footPage" value="<<" action="{!setCon.first}" disabled="{!!setCon.hasPrevious}" title="First Page"/>
+                    <apex:commandButton id="cmbPre" status="fetchStatus" reRender="pb,popupmsg,footPage" value="< Previous" action="{!setCon.previous}" disabled="{!!setCon.hasPrevious}" title="Previous Page"/>
+                    <apex:commandButton id="cmbNext"  status="fetchStatus" reRender="pb,popupmsg,footPage" value="Next >" action="{!setCon.next}" disabled="{!!setCon.hasNext||setCon.PageNumber >= 20}" title="Next Page"/>                
+                    </apex:outputPanel>
+                    
+                    <!--
+                    <apex:outputPanel style="color:#4AA02C;font-weight:bold">
+                        <apex:actionStatus id="fetchStatus" startText="Fetching..." stopText=""/>
+                    </apex:outputPanel>
+                    -->
+                    <apex:outputPanel >
+                    	<apex:outputlabel id="pageCount">Page {!setCon.pageNumber} of {!CEILING(setCon.resultSize / setCon.pageSize)}</apex:outputlabel>
+                    </apex:outputPanel>
+                  </apex:panelGrid>
+                  <apex:panelGrid width="100%"  rendered="{!setCon.resultSize = 0}" >
+                     <apex:outputlabel >No records to display</apex:outputlabel>                
+                  </apex:panelGrid>
+                </apex:outputPanel>
+            </apex:facet>
+        <apex:actionstatus id="fetchStatus">
+            <apex:facet name="start">
+                <div class="waitingSearchDiv" style="background-color: #fbfbfb; height: 100%;opacity:0.65;width:100%;"> 
+                       <div class="sfLoading" />
+                </div>
+            </apex:facet>
+        </apex:actionstatus>
+    </apex:pageBlock>
+    <!--  
+    <apex:pageBlock title="Run Automatically" 
+    				rendered="{!AND($ObjectType[GeoenableWorkflow__c.PrimaryObjectType__c].Triggerable, canCreateTrigger)}">
+    	
+    	<apex:outputText >
+    	To run this workflow automatically upon database events, sucn as record inserts and updates, define an Apex trigger using the following syntax:
+    	<pre><code>
+    	trigger triggerName on {!esrimaps__GeoenableWorkflow__c.esrimaps__PrimaryObjectType__c} (after insert, after update) {
+    		{!packageNamespace}Locate.runWorkflow(Trigger.newMap, Trigger.oldMap);
+    	}
+    	</code></pre>
+    	</apex:outputText>
+    	<apex:commandLink value="Manage Apex Triggers" action="{!openTriggerList}" target="_blank" 
+    					  rendered="{!NOT($ObjectType[GeoenableWorkflow__c.PrimaryObjectType__c].Custom)}" /> 
+    </apex:pageBlock>
+    -->
+     <apex:outputPanel id="popupmsg">
+    <apex:outputPanel styleClass="popupContainer" layout="block" rendered="{!limitMsg}"> 
+    <apex:outputPanel styleClass="popupBg" layout="block">
+    </apex:outputPanel>
+    <apex:outputPanel styleClass="popupCenter" layout="block">
+    <apex:pageBlock title="Popup Message" >
+        <apex:pageBlockButtons location="bottom" id="pbButtonsChange">		
+		<apex:commandButton action="{!closePopupmsg}" value="   OK   "
+			                rerender="popupmsg,pb,selectall,debug"
+                            immediate="true"/>
+		</apex:pageBlockButtons>   
+        <apex:pageBlockSection columns="1" id="pbEditInfo" >
+        <apex:pageBlockSectionItem > 
+         <apex:outputlabel >You can only view up to 2000 records one time.</apex:outputlabel>        
+        </apex:pageBlockSectionItem>                
+       </apex:pageBlockSection>            
+      </apex:pageBlock>         
+    </apex:outputPanel> 
+    </apex:outputPanel>  
+    </apex:outputPanel>
+	</apex:form>
+
+</apex:page>

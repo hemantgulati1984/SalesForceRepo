@@ -1,0 +1,304 @@
+<apex:page standardController="esrimaps__BisLayerInfo__c" 
+           extensions="esrimaps.MapLayerController" >
+    <style>
+        .popupBg {
+           background-color:black;
+           opacity: 0.60;
+           filter: alpha(opacity = 60);
+           position: absolute;
+           width: 100%;
+           height: 100%;
+           top: 0;
+           left: 0;
+            
+        }
+        
+        .popupContainer {
+           position: absolute;
+           width: 100%;
+           height: 100%;
+           top: 0;
+           left: 0;
+           z-index: 70;   
+        }
+        
+        .popupCenter {
+           background-color: transparent;
+           position: absolute;
+           top: 25px; 
+           width: 520px;
+           left: 50%;
+           margin-left: -260px;
+           overflow: auto;  
+        }
+        
+        .colList {
+            text-align: center;
+        }
+        .colButtons {
+            vertical-align: middle !important;
+            text-align: center;
+        }
+        
+        .fieldButtonBackground {
+	        background-color: transparent;
+	        background-image:url({!$Resource.ListButtonArrows}); 
+            background-repeat: no-repeat; 
+			width: 24px;
+			height: 20px;
+        }
+        
+        .fieldButtons {
+            padding-top: 0.1em;
+            padding-bottom: 0.1em;
+        }
+
+    </style>
+    <c:EMFLoaderComponent />
+
+<apex:sectionHeader subtitle="{!IF(NOT(ISBLANK(esrimaps__BisLayerInfo__c.Id)), esrimaps__BisLayerInfo__c.Name, 'New ' + $ObjectType.esrimaps__BisLayerInfo__c.Label)}" 
+                    title="Esri Maps"  />
+                     
+<apex:outputPanel rendered="{!NOT(IsConfigurationValid)}">
+	<apex:pageMessage title="Connect Salesforce to Esri Maps" 
+	                  summary="Incomplete configuration information. Please contact your Salesforce administrator to complete the Esri Maps for Salesforce configurations."                  
+	                  severity="Error" strength="2" />
+</apex:outputPanel>
+
+<apex:form rendered="{!IsConfigurationValid}" >
+    <apex:actionFunction name="actionFunc_OnGenerateComplete" rerender="debug,popupEMF,cmdSave,panelConfig" action="{!onBisLayerInfoGenerated}">
+        <apex:param value="" name="paramBisLayerJson"></apex:param>
+        <apex:param value="" name="paramBisLayerGenerateFeature"></apex:param>
+    </apex:actionFunction>
+
+<apex:pageBlock mode="edit" title="{!$ObjectType.esrimaps__BisLayerInfo__c.Label} Edit">
+    <apex:pageBlockButtons id="buttons" location="bottom">
+        <apex:commandButton value="Save" 
+                            disabled="{!ISBLANK(PrimaryObjectType) || ISBLANK(jsonGenerateFeature)}" 
+                            action="{!saveBisLayerInfo}" id="cmdSave" />
+        <apex:commandButton value="Cancel" rerender="debug" action="{!closePage}" immediate="true"/>
+    </apex:pageBlockButtons>
+
+    <!-- Step 1 -->
+    <apex:pageBlockSection id="step1" title="Step 1. Enter Name and Object Type" collapsible="false" columns="1">
+        <apex:pageBlockSectionItem >
+            <apex:outputLabel value="{!$ObjectType.esrimaps__BisLayerInfo__c.fields.Name.label}" />
+		    <apex:outputPanel styleClass="requiredInput" layout="block" >
+		        <apex:outputPanel styleClass="requiredBlock" layout="block"/>
+			    <apex:inputField value="{!esrimaps__BisLayerInfo__c.Name}" />
+		    </apex:outputPanel>
+	    </apex:pageBlockSectionItem>
+	    <!-- Primary Object -->
+	    <apex:pageBlockSectionItem >
+	        <apex:outputLabel for="selPrimaryObjectType">{!$ObjectType.esrimaps__BisLayerInfo__c.fields.esrimaps__PrimaryObject__c.Label}</apex:outputLabel>
+	        <apex:outputPanel >
+		        <apex:outputPanel styleClass="requiredInput" layout="block" rendered="{!ISBLANK(esrimaps__BisLayerInfo__c.Id)}" >
+		            <apex:outputPanel styleClass="requiredBlock"/>
+			        <apex:selectList id="selPrimaryObjectType" multiselect="false" size="1" value="{!primaryObjectType}" >
+			            <apex:selectOptions value="{!objectTypes}" />
+			            <apex:actionSupport event="onchange" action="{!onPrimaryObjectChanged}" rerender="debug,step2,step3,cmdSave">
+			                 
+			            </apex:actionSupport>
+			        </apex:selectList>
+			        
+		        </apex:outputPanel>
+		        <apex:outputText rendered="{!NOT(ISBLANK(esrimaps__BisLayerInfo__c.Id))}"  value="{!primaryObjectTypeLabel}" />
+            </apex:outputPanel>
+	    </apex:pageBlockSectionItem>
+	    <!-- Hidden inputField to pull the field of the object via markup -->
+        <apex:inputField value="{!esrimaps__BisLayerInfo__c.esrimaps__PrimaryObject__c}" rendered="false" />
+    </apex:pageBlockSection>
+    
+    <!-- Step 2 -->
+    <apex:outputPanel id="step2">
+    <apex:pageBlockSection title="Step 2. Specify the Location Information" collapsible="false" columns="1" >
+        <apex:pageMessage rendered="{!ISBLANK(PrimaryObjectType) && ISBLANK(esrimaps__BisLayerInfo__c.esrimaps__PrimaryObject__c)}" severity="INFO" strength="1" 
+                  title="Required Value Missing ({!$ObjectType.esrimaps__BisLayerInfo__c.fields.esrimaps__PrimaryObject__c.Label})"
+                  summary="Please select a value to enable location information configuration."  /> 
+        <apex:pageMessage rendered="{!ISBLANK(PrimaryObjectType) && NOT(ISBLANK(esrimaps__BisLayerInfo__c.esrimaps__PrimaryObject__c))}" 
+                          severity="Error" strength="1" 
+                          title="Invalid Value ({!$ObjectType.esrimaps__BisLayerInfo__c.fields.esrimaps__PrimaryObject__c.Label}: {!primaryObjectTypeLabel})"
+                          summary="You do not not have the level of access necessary to perform the operation you requested."  /> 
+        <!-- Bringing up EMF -->
+        <apex:pageBlockSectionItem helpText="Specify the location lookup type and matching fields to display records on a map.">
+            <apex:outputLabel >Configuration</apex:outputLabel>
+            <apex:outputPanel id="panelConfig" styleClass="requiredInput" layout="block">
+                <apex:outputPanel styleClass="requiredBlock"/>
+                <apex:outputPanel >
+                    <apex:outputText >{!IF(NOT(ISBLANK(jsonGenerateFeature)), typeGenerateFeature, 'None ')}</apex:outputText>
+                    <apex:outputPanel rendered="{!NOT(ISBLANK(generateFeatureLink))}"  >
+                        <apex:outputText >&nbsp;(</apex:outputText>
+                        <apex:outputLink target="_blank" value="{!generateFeatureLink}">Service Details</apex:outputLink>
+                        <apex:outputText >)</apex:outputText>
+                    </apex:outputPanel>
+                    <!-- Summary -->
+	                <apex:outputPanel rendered="{!NOT(ISBLANK(jsonGenerateFeature))}">
+	                    <apex:outputText >, using location information stored in the following field(s):</apex:outputText>
+	                    <apex:dataList value="{!fieldsGenerateFeature}" var="gfField">
+	                      <apex:outputText value="{!gfField}"/>
+	                    </apex:dataList>
+                    </apex:outputPanel>
+                </apex:outputPanel>
+                
+                <apex:outputPanel rendered="{!NOT(ISBLANK(PrimaryObjectType))}" id="cmdEMF" >
+                    <apex:outputText >[&nbsp;</apex:outputText>
+                    <apex:commandLink value="Change" rerender="debug,popupEMF" action="{!toggleLocatorPopup}" />
+                    <apex:outputText >&nbsp;]</apex:outputText>
+                </apex:outputPanel>
+             </apex:outputPanel>   
+                
+        </apex:pageBlockSectionItem>
+
+    </apex:pageBlockSection>
+    </apex:outputPanel>
+
+    <!-- Step 3 -->
+    <apex:outputPanel id="step3">
+    <apex:pageBlockSection title="Step 3. Select Fields to Display" collapsible="false" columns="1">
+
+        <apex:pageMessage rendered="{!ISBLANK(PrimaryObjectType) && ISBLANK(esrimaps__BisLayerInfo__c.esrimaps__PrimaryObject__c)}" severity="INFO" strength="1" 
+                          title="Required Value Missing ({!$ObjectType.esrimaps__BisLayerInfo__c.fields.esrimaps__PrimaryObject__c.Label})"
+                          summary="Please select a value to enable display field selection."  /> 
+        <apex:pageMessage rendered="{!ISBLANK(PrimaryObjectType) && NOT(ISBLANK(esrimaps__BisLayerInfo__c.esrimaps__PrimaryObject__c))}" 
+                          severity="Error" strength="1" 
+                          title="Invalid Value ({!$ObjectType.esrimaps__BisLayerInfo__c.fields.esrimaps__PrimaryObject__c.Label}: {!primaryObjectTypeLabel})"
+                          summary="You do not not have the level of access necessary to perform the operation you requested."  /> 
+        
+        <apex:panelGrid columns="4" columnClasses="colList,colButtons">
+
+            <apex:outputLabel ><h3>Available Fields</h3></apex:outputLabel>
+	        <apex:panelGroup ></apex:panelGroup>
+	        <apex:outputLabel ><h3>Selected Fields</h3></apex:outputLabel>
+	        <apex:panelGroup ></apex:panelGroup>
+	        
+	        <apex:selectList id="selFields" multiselect="true" size="15" value="{!selectedAvailableFields}" disabled="{!ISBLANK(PrimaryObjectType)}">
+	            <apex:selectOptions value="{!availableFields}" />
+	        </apex:selectList>
+	        
+	        <!-- Add/remove buttons -->
+	        <apex:panelGroup layout="block">
+	            <apex:outputPanel layout="block" styleClass="fieldButtons">Add</apex:outputPanel>
+	            <apex:outputPanel layout="block" styleClass="fieldButtons">
+	                <apex:commandButton title="Add" styleClass="fieldButtonBackground" status="fieldsSwapStatus"
+	                                    style="background: url({!$Resource.esrimaps__ListButtonArrows}); border-width: 0;" 
+	                                    value="" disabled="{!ISBLANK(PrimaryObjectType)}"  
+	                                    action="{!addFields}" rerender="debug,selCheckedFields,selFields" />
+	            </apex:outputPanel>
+	            <apex:outputPanel layout="block" styleClass="fieldButtons">
+	                <apex:commandButton title="Remove" styleClass="fieldButtonBackground" status="fieldsSwapStatus"
+	                                    style="background: url({!$Resource.esrimaps__ListButtonArrows}); border-width: 0; background-position: left -60px;" 
+	                                    value="" disabled="{!ISBLANK(PrimaryObjectType)}"  
+	                                    action="{!removeFields}" rerender="debug,selCheckedFields,selFields" >
+	                </apex:commandButton>
+	            </apex:outputPanel>
+	            <apex:outputPanel layout="block" styleClass="fieldButtons">Remove</apex:outputPanel>
+	            <apex:actionstatus id="fieldsSwapStatus" >
+                  <apex:facet name="start">
+                      <apex:outputPanel >
+                          <div class="waitingSearchDiv" style="height: 100%;width:100%;"></div>
+                          <apex:image value="/img/loading.gif" />
+                      </apex:outputPanel>
+                  </apex:facet>
+                </apex:actionstatus> 
+	            
+	        </apex:panelGroup>
+	        
+	        <apex:selectList id="selCheckedFields" multiselect="true" size="15" value="{!selectedSelectedFields}" disabled="{!ISBLANK(PrimaryObjectType)}">
+	            <apex:selectOptions value="{!selectedFields}" />
+	        </apex:selectList>
+	        
+	        <!-- Sort buttons -->
+	        <apex:panelGroup rendered="true" layout="block">
+	            <!-- Top -->
+	            <apex:outputPanel layout="block" styleClass="fieldButtons">Top</apex:outputPanel>
+	            <apex:outputPanel layout="block" styleClass="fieldButtons">
+	                <apex:commandButton title="Top" styleClass="fieldButtonBackground" status="fieldSortStatus"
+	                                    style="background: url({!$Resource.esrimaps__ListButtonArrows}); border-width: 0; background-position: left -240px;" 
+	                                    value="" disabled="{!ISBLANK(PrimaryObjectType)}"  
+	                                    action="{!moveTopFields}" rerender="debug,selCheckedFields,selFields" />
+	            </apex:outputPanel>
+	            
+	            <!-- Up -->
+	            <apex:outputPanel layout="block" styleClass="fieldButtons">Up</apex:outputPanel>
+	            <apex:outputPanel layout="block" styleClass="fieldButtons">
+	                <apex:commandButton title="Up" styleClass="fieldButtonBackground" status="fieldSortStatus"
+	                                    style="background: url({!$Resource.esrimaps__ListButtonArrows}); border-width: 0; background-position: left -120px;" 
+	                                    value="" disabled="{!ISBLANK(PrimaryObjectType)}"  
+	                                    action="{!moveUpFields}" rerender="debug,selCheckedFields,selFields" >
+	                </apex:commandButton>
+	            </apex:outputPanel>
+	            
+	            <!-- Down -->
+	            <apex:outputPanel layout="block" styleClass="fieldButtons">
+	                <apex:commandButton title="Down" styleClass="fieldButtonBackground" status="fieldSortStatus"
+	                                    style="background: url({!$Resource.esrimaps__ListButtonArrows}); border-width: 0; background-position: left -180px;" 
+	                                    value="" disabled="{!ISBLANK(PrimaryObjectType)}"  
+	                                    action="{!moveDownFields}" rerender="debug,selCheckedFields,selFields" >
+	                </apex:commandButton>
+	            </apex:outputPanel>
+	            <apex:outputPanel layout="block" styleClass="fieldButtons">Down</apex:outputPanel>
+	            
+	            <!-- Bottom -->
+	            <apex:outputPanel layout="block" styleClass="fieldButtons">
+	                <apex:commandButton title="Bottom" styleClass="fieldButtonBackground" status="fieldSortStatus"
+	                                    style="background: url({!$Resource.esrimaps__ListButtonArrows}); border-width: 0; background-position: left -300px; " 
+	                                    value="" disabled="{!ISBLANK(PrimaryObjectType)}"  
+	                                    action="{!moveBottomFields}" rerender="debug,selCheckedFields,selFields" >
+	                </apex:commandButton>
+	            </apex:outputPanel>
+	            <apex:outputPanel layout="block" styleClass="fieldButtons">Bottom</apex:outputPanel>
+	            
+	            <apex:actionstatus id="fieldSortStatus" >
+                  <apex:facet name="start">
+                      <apex:outputPanel >
+                          <div class="waitingSearchDiv" style="height: 100%;width:100%;"></div>
+                          <apex:image value="/img/loading.gif" />
+                      </apex:outputPanel>
+                  </apex:facet>
+                </apex:actionstatus> 
+	        </apex:panelGroup>
+        </apex:panelGrid>
+        
+    </apex:pageBlockSection>
+    </apex:outputPanel>
+</apex:pageBlock>
+
+<!--  Popups -->
+<apex:outputPanel id="popupEMF">
+   <apex:outputPanel styleClass="popupContainer" layout="block" rendered="{!showLocatorPopup}">
+     <apex:outputPanel styleClass="popupBg" layout="block"></apex:outputPanel>
+     <apex:outputPanel styleClass="popupCenter" layout="block">
+      <apex:pageBlock title="Location Configuration" mode="edit" >
+        <apex:iframe id="jazzApp" scrolling="false" html-class="pending" height="500px" >
+            <script>
+	            initializeRemoter(function(Remoter){
+	               Remoter.returnRelatedFields = true;
+                   Remoter.useOrganizationCredential = false;
+                   
+                   initEMF(Remoter, 
+                        'jazzApp', 
+                        "esri-maps-sf/components/MapLayerConfiguration.html?tableId={!JSENCODE(primaryObjectType)}",
+                        "esri-maps-sf/components/MapLayerConfiguration.html",
+                        function() {
+                            subscribeBisLayerInfoGeneration(
+                                function(handle, jsonInfo, gf){
+                                    handle.remove();
+                                    actionFunc_OnGenerateComplete(jsonInfo, gf);
+                                }
+                            );
+                        });
+	            });
+            </script>
+        </apex:iframe>
+        
+        
+        <apex:pageBlockButtons location="top" style="float: right;">
+            <apex:commandLink value="Cancel" rerender="debug,popupEMF" action="{!toggleLocatorPopup}"/>
+        </apex:pageBlockButtons>  
+         
+      </apex:pageBlock>
+      </apex:outputPanel>
+    </apex:outputPanel>    
+</apex:outputPanel>
+</apex:form>
+</apex:page>

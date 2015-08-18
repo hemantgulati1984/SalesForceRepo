@@ -1,0 +1,7 @@
+<apex:page tabStyle="EsriMapsSettings__tab" docType="html-5.0">
+    <apex:sectionHeader title="Esri Maps for Salesforce" subtitle="Home" />
+    <c:AuthenticationComponent />
+	<script>
+	   checkOAuthURLResponse();
+	</script>
+</apex:page>

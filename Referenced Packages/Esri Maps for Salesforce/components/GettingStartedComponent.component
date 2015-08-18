@@ -1,0 +1,80 @@
+<apex:component controller="esrimaps.BisProviderRemoter">
+
+	<style>
+		.pending {
+			background-image:url({!$Resource.EsriMapsImageProgress}); 
+			background-repeat: no-repeat; 
+			background-position: center;
+		}
+	</style>
+	<script>
+		// Setting dojo package paths via controller variables
+		dojoConfig = {
+			async: true,
+			parseOnLoad: false,
+			packages: [
+				{ name: "esri-maps-sf", location: "{!JSENCODE(SalesforceRoot)}" }
+			]
+		};
+	</script>
+	
+	<script src="{!JSENCODE(DojoRoot)}" />
+	
+	<script>
+        function loadEMF() {
+			require([
+				"dojo/_base/declare", "dojo/dom", "dojo/dom-class", "dojo/has",
+				"esri-maps-sf/bisprovider/BisProvider", 
+				"esri-maps/bisprovider/BISProvider", "esri-maps/bisprovider/_ProxyProviderMixin",
+				"esri-maps-sf/bisprovider/BisProviderRemoter",
+				"dojo/domReady!"], 
+			function(
+				declare, dom, domClass, has,
+				BISProvider, BisProviderImpl,
+				_ProxyProviderMixin,
+				Remoter
+				) {
+				
+				// Setting up singleton class for accessing JavaScript Apex remoting
+				var controllerClass =  "{!$RemoteAction.BisProviderRemoter.ping }".replace(".ping", "");
+				var namespacePrefix = controllerClass.replace("BisProviderRemoter", "").replace(".", "");
+				Remoter.controllerName = controllerClass;
+				Remoter.namespacePrefix = namespacePrefix;
+				Remoter.useOrganizationCredential = false;
+	            Remoter.portalUrl = "{!JSENCODE(PortalUrl)}";
+	            Remoter.isOneOffSignIn = false;
+				var iframe = dom.byId("jazzApp");
+				
+				if (has("ie")){
+					iframe.onreadystatechange = function() {
+						if (iframe.readyState == "complete") domClass.remove(iframe, "pending");
+					};
+				}
+				else {
+					iframe.onload = function() {
+						domClass.remove(iframe, "pending");
+					}
+				}
+				Remoter.tokenReferer = require.toUrl("esri-maps-sf/components/GettingStarted.html");	
+				iframe.src = require.toUrl("esri-maps-sf/components/GettingStarted.html");
+				
+				var bisProvider = declare([BISProvider, _ProxyProviderMixin])
+					(new BisProviderImpl(), {
+						proxy : {
+							iframeNode: iframe
+						}
+					});
+	
+					
+			});
+		}	
+	</script>
+
+  
+	<apex:iframe id="jazzApp"  html-class="pending" height="480px">
+	  <script>
+	       loadEMF();
+	  </script>
+	</apex:iframe>
+
+</apex:component>

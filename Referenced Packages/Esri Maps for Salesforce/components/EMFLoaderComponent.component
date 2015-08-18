@@ -1,0 +1,102 @@
+<apex:component controller="esrimaps.BisProviderRemoter">
+
+    <script>
+        // Setting dojo package paths via controller variables
+        dojoConfig = {
+            async: true,
+            parseOnLoad: false,
+            packages: [
+                { name: "esri-maps-sf", location: "{!JSENCODE(SalesforceRoot)}" }
+            ]
+        };
+    </script>
+
+    <script src="{!JSENCODE(DojoRoot)}" />
+    <style>
+        .pending {
+            background-image:url({!$Resource.EsriMapsImageProgress}); 
+            background-repeat: no-repeat; 
+            background-position: center;
+        }
+    </style>
+    
+    <script>
+
+        function initializeRemoter(onInitialized) {
+	        require([
+	            "esri-maps-sf/bisprovider/BisProviderRemoter",
+	            "dojo/domReady!"], 
+	        function(
+	            Remoter
+	            ) {
+	            
+	                 // Setting up singleton class for accessing JavaScript Apex remoting
+	                 var controllerClass =  "{!$RemoteAction.BisProviderRemoter.ping }".replace(".ping", "");
+	                 var namespacePrefix = controllerClass.replace("BisProviderRemoter", "").replace(".", "");
+	                 Remoter.controllerName = controllerClass;
+	                 Remoter.namespacePrefix = namespacePrefix;
+	                 Remoter.isOneOffSignIn = false;
+	                 onInitialized(Remoter);
+	            });
+        }
+	    
+	    function initEMF(
+	       /* esri-maps-sf/bisprovider/BisProviderRemoter */ Remoter, 
+	       /* string */ idApp,
+	       /* String */ iframeSrc, 
+	       /* String */emfToken,
+	       /* function */ onBeforeInitialize) {
+	        require([
+	                "dojo/_base/declare", "dojo/dom", "dojo/dom-class", "dojo/has", "dojo/topic",
+	                "esri-maps-sf/bisprovider/BisProvider", 
+	                "esri-maps/bisprovider/BISProvider", "esri-maps/bisprovider/_ProxyProviderMixin",
+	                "dojo/domReady!"], 
+	            function(
+	                declare, dom, domClass, has, topic,
+	                BISProvider, BisProviderImpl, _ProxyProviderMixin
+	                ) {
+
+	                var iframe = dom.byId(idApp);
+	                
+	                if (has("ie")){
+	                    iframe.onreadystatechange = function() {
+	                        if (iframe.readyState == "complete") domClass.remove(iframe, "pending");
+	                    };
+	                }
+	                else {
+	                    iframe.onload = function() {
+	                        domClass.remove(iframe, "pending");
+	                    }
+	                }
+	                
+	                onBeforeInitialize();
+	                
+	                Remoter.portalUrl = "{!JSENCODE(PortalUrl)}";
+	                Remoter.tokenReferer = require.toUrl(emfToken); 
+	                iframe.src = require.toUrl(iframeSrc); 
+	                
+	                var bisProvider = declare([BISProvider, _ProxyProviderMixin])
+	                    (new BisProviderImpl(), {
+	                        proxy : {
+	                            iframeNode: iframe
+	                        }
+	                    });
+	            });
+	    }
+	    
+	    function subscribeBisLayerInfoGeneration(/* function */ onGenerated) {
+	       require(["dojo/topic", "dojo/json", "dojo/_base/array"], function(topic, JSON, array){
+              var hGenerated = topic.subscribe("esri-maps-sf/bisLayerInfo-generated", function(jsonInfo){
+                var info = JSON.parse(jsonInfo);
+                var gf = info.generateFeatures;
+                
+                //var lookups = array.map(gf.lookupFields, function(f){
+                        //return { id: f.name, label: f.mappedTo };
+                //        return f.name;
+                //});
+                onGenerated(hGenerated, jsonInfo, JSON.stringify(gf));
+              });
+           });
+	    }
+    </script>
+</apex:component>

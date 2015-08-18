@@ -1,0 +1,559 @@
+<apex:page standardController="esrimaps__Visualization__c" 
+           extensions="esrimaps.BisProviderControllerExtension,esrimaps.TableViewControllerExtension"
+           action="{!redirect}"
+           >
+    <!--  variable used in JavaScript must be declared by itself (i.e. not within form) -->
+    <apex:variable var="varPermission" 
+           value="{!AND($ObjectType.Storage__c.Createable, 
+                        $ObjectType.Storage__c.Deletable,
+                        $ObjectType.Storage__c.fields.JSON__c.Createable,
+                        $ObjectType.Storage__c.fields.Key__c.Createable
+                )}" 
+    />
+
+    <link rel="stylesheet" href="{!JSENCODE(JazzRoot)}/dojo/dijit/themes/claro/claro.css" />
+    <style>
+        .tableContainer {
+            width: 100%;
+            height: 100%; 
+            overflow: auto;
+        }
+
+        .pending {
+            background-image:url({!$Resource.EsriMapsImageProgress}); 
+            background-repeat: no-repeat; 
+            background-position: center;
+        }
+        
+        .sfLoading {
+            background-image:url(/img/loading.gif); 
+            background-repeat: no-repeat; 
+            background-position: center;
+            width: 100%;
+            height: 100%; 
+        }
+
+        .colLeft {
+            width: 33%;
+            text-align: left;
+        }
+        
+        .colMiddle {
+            width: 34%;
+            text-align: center;
+        }
+        
+        .colRight {
+            width: 33%;
+            text-align: right;
+        }
+
+        .popupBg {
+           background-color:black;
+           opacity: 0.60;
+           filter: alpha(opacity = 60);
+           position: absolute;
+           width: 100%;
+           height: 100%;
+           top: 0;
+           left: 0;
+            
+        }
+        
+        .popupContainer {
+           position: absolute;
+           width: 100%;
+           height: 100%;
+           top: 0;
+           left: 0;
+           z-index: 70; 
+        }
+        
+        .popupCenter {
+           background-color: transparent;
+           
+           position: absolute;
+           top: 25px; 
+           width: 520px;
+           left: 50%;
+           margin-left: -260px;
+           overflow: auto;  
+        }
+        
+        .cellNoWrap{
+            white-space: nowrap;
+        }
+        
+        .gridNoBorder {
+            border: none !important;
+            border-color: transparent !important;
+        }
+    </style>
+    
+    <script>
+        // Setting dojo package paths via controller variables
+        dojoConfig = {
+            async: true,
+            parseOnLoad: false,
+            packages: [
+                { name: "esri-maps-sf", location: "{!JSENCODE(SalesforceRoot)}" }
+            ]
+        };
+    </script>
+
+    <script src="{!JSENCODE(DojoRoot)}" />
+
+<apex:outputPanel rendered="{!NOT(IsConfigurationValid)}">
+    <apex:sectionHeader title="Esri Maps" subtitle="{!sectionHeaderSubtitle}" />
+     <apex:pageMessage title="Connect Salesforce to Esri Maps" 
+                       summary="Incomplete configuration information. Please contact your Salesforce administrator to complete the Esri Maps for Salesforce configurations."
+                       severity="Error" strength="2" />
+</apex:outputPanel> 
+        
+<apex:form id="pageForm" rendered="{!IsConfigurationValid}">
+
+    <!-- action functions called by dojo to toggle Apex properties for save/cancel buttons  -->
+    <apex:actionFunction name="actionFunc_OnSaveStart" action="{!onSaveStarted}" rerender="cmdSave,cmdSaveAs,cmdDelete,cmdClose,saveMsg,debug">
+       </apex:actionFunction>
+    <apex:actionFunction name="actionFunc_OnSaveComplete" action="{!onSaveCompleted}" rerender="cmdSave,cmdSaveAs,cmdDelete,cmdClose,saveMsg,debug">
+        <apex:param value="" name="paramMapId"></apex:param>
+    </apex:actionFunction>
+    
+    <apex:actionFunction name="actionFunc_OnMapReady" action="{!onMapReady}" 
+                         oncomplete="actionFunc_PopulateTables();"
+                         rerender="cmdSave,cmdSaveAs,cmdDelete,cmdClose,paneTableToggle,pbTableContainer,header,footer,splash,debug,popupRestoreInfo">         
+        <apex:param value="" name="paramMapDirtyFlag"></apex:param>
+    </apex:actionFunction>
+
+    <apex:actionFunction name="actionFunc_HideSaveAs" action="{!cancelSaveAs}" rerender="popupSaveAs" />
+    <apex:actionFunction name="actionFunc_OnMapDirty" action="{!onMapDirty}" 
+                         rerender="mapTitle,saveMsg,debug">
+        <apex:param value="" name="paramMapDirtyFlag"></apex:param>
+    </apex:actionFunction>
+                          
+    <!--  action function to update tables/records pane -->
+    <apex:actionFunction name="actionFunc_UpdateTables" action="{!updateTables}"
+                         status="statusLoadTable"
+                         rerender="pbTableContainer,header,footer,debug" >
+    </apex:actionFunction>
+    
+    <apex:actionFunction name="actionFunc_PopulateTables" action="{!populateLayerList}"  
+                         status="statusLoadTable"
+                         oncomplete="initSelectionTracking();"
+                         rerender="pbTableContainer,header,footer,debug,panelScriptRefresh" />
+    
+    <apex:actionFunction name="actionFunc_AddLayer" action="{!onLayerAdded}"
+                         status="statusLoadTable"
+                         rerender="pbTableContainer,header,footer,debug">
+      <apex:param value="" name="paramNewLayerId"></apex:param>
+      <apex:param value="" name="paramNewLayerTitle"></apex:param>
+      <apex:param value="" name="paramNewLayerTableId"></apex:param>
+      <apex:param value="" name="paramNewLayerViewId"></apex:param>
+      <apex:param value="" name="paramNewLayerFieldIds"></apex:param>
+      <apex:param value="" name="paramNewLayerSupportsSelection"></apex:param>
+    </apex:actionFunction>
+    
+    <apex:actionFunction name="actionFunc_RemoveLayer" action="{!onLayerRemoved}"
+                         status="statusLoadTable"
+                         rerender="pbTableContainer,header,footer,debug" >
+      <apex:param value="" name="paramOldLayerId"></apex:param>
+      <apex:param value="" name="paramOldLayerTitle"></apex:param>
+    </apex:actionFunction>
+    
+    <apex:actionFunction name="actionFunc_UpdateLayerSelection" action="{!onLayerSelectionChanged}"
+                         status="statusLoadTable"
+                         rerender="pbTableContainer,header,footer,debug" >
+      <apex:param value="" name="paramLayerId"></apex:param>
+      <apex:param value="" name="paramSelectionIds"></apex:param>
+      <apex:param value="" name="paramSupportsSelection"></apex:param>
+    </apex:actionFunction>
+    
+    
+    <apex:actionFunction name="actionFunc_ReorderLayers" action="{!onLayersReordered}"
+                         status="statusUpdateLayersDropdown"
+                         rerender="selLayers,debug">
+      <apex:param value="" name="paramLayerIds"></apex:param>
+    </apex:actionFunction>
+    
+    <apex:actionFunction name="actionFunc_RenameLayer" action="{!onLayerRenamed}"
+                         status="statusUpdateLayersDropdown"
+                         rerender="selLayers,debug">
+      <apex:param value="" name="paramLayerId"></apex:param>
+      <apex:param value="" name="paramLayerTitle"></apex:param>
+    </apex:actionFunction>
+    
+    <!-- Contains scripts to be refreshed upon rerender to pick up Apex updated properties -->
+    <apex:outputPanel id="panelScriptRefresh">
+        <script>
+            // Fires when selection dropdown changes
+            function initSelectionTracking(){
+                trackSelection("{!JSENCODE(currentLayerId)}", actionFunc_UpdateLayerSelection);
+            }
+        </script>
+    </apex:outputPanel>
+
+    <c:MapViewComponent varPermission="{!varPermission}"
+                    varControllerNamespace="{!SUBSTITUTE(SUBSTITUTE($RemoteAction.BisProviderControllerExtension.ping, 'BisProviderControllerExtension.ping', ''), '.', '')}"
+                    varControllerName="{!SUBSTITUTE($RemoteAction.BisProviderControllerExtension.ping, '.ping', '')}"
+                    varAGOL="{!PortalUrl}"  />
+                    
+    <!-- Map Designer -->
+    <apex:inputHidden value="{!sectionHeaderSubtitle}" id="theNameField" />
+    <apex:outputPanel id="panelMapDesigner">
+        <apex:sectionHeader title="Esri Maps" 
+                            subtitle="{!sectionHeaderSubtitle}" 
+                            id="mapTitle"/>
+
+        <apex:pageBlock id="pbProperties" title="Map Properties" mode="edit" rendered="{!ISBLANK(esrimaps__Visualization__c.Name)}" >
+            <apex:pageblockButtons location="bottom">
+                <apex:commandButton value="Next" rerender="panelMapDesigner,panelMap" rendered="{!$ObjectType.esrimaps__Visualization__c.Createable}" />
+                <apex:commandButton value="Cancel" action="{!URLFOR($Action.Visualization__c.Tab, $ObjectType.Visualization__c)}" immediate="true" />
+            </apex:pageblockButtons>
+
+            <apex:pageMessage rendered="{!NOT($ObjectType.esrimaps__Visualization__c.Createable)}" 
+                              title="Insufficient Privileges" 
+                              summary="You do not have the level of access necessary to create a new map." 
+                              severity="Error" strength="1"/>
+
+            <apex:pageBlockSection id="pbsInfo" title="Basic information" collapsible="false" columns="1" 
+                                   rendered="{!$ObjectType.esrimaps__Visualization__c.Createable}">
+                <apex:inputField value="{!esrimaps__Visualization__c.Name}" required="true" id="inputMapName" />
+                <apex:inputField value="{!esrimaps__Visualization__c.esrimaps__Description__c}" id="inputMapDesc" />                
+            </apex:pageBlockSection>
+        </apex:pageBlock>
+
+        <apex:outputPanel id="pbSave" layout="block" rendered="{!NOT(ISBLANK(esrimaps__Visualization__c.Name))}">
+
+
+            <!--  Save, Save as, delete and close buttons -->
+            <apex:commandButton value="{!IF(disableSave, 'Saving...', 'Save' )}"  id="cmdSave"
+                                disabled="{!disableSave || NOT(mapReady) || NOT(canSave)}" 
+                                action="{!onSaveStarted}" 
+                                onclick="saveEMFMap(actionFunc_OnSaveStart, actionFunc_OnSaveComplete, actionFunc_OnMapDirty);"
+                                status="statusSaveMap"
+                                rendered="{!$ObjectType.esrimaps__Visualization__c.Updateable}"
+                                rerender="debug,cmdSave,cmdSaveAs,cmdClose,cmdDelete" />
+
+            <apex:commandButton value="Save As"  id="cmdSaveAs"
+                                disabled="{!disableSave || NOT(mapReady) || isNewMap}"          
+                                action="{!displaySaveAs}" status="statusSaveMap"                    
+                                rendered="{!$ObjectType.esrimaps__Visualization__c.Createable}"
+                                rerender="popupSaveAs" />
+
+            <apex:commandButton value="Delete" id="cmdDelete"
+                                onclick="if(!confirm('Are you sure?')) {return false;} window.removeEventListener('beforeunload', onbeforeUnloadListener); return true; "
+                                disabled="{!disableSave || NOT(mapReady) || isNewMap || NOT(canDelete)}"
+                                rendered="{!$ObjectType.esrimaps__Visualization__c.Deletable}"
+                                action="{!deleteMap}" />    
+          
+            <apex:commandButton value="Close" disabled="{!disableSave}" 
+                                id="cmdClose" immediate="true" 
+                                onclick="window.removeEventListener('beforeunload', onbeforeUnloadListener);if(!confirm('Are you sure you want to close the map? If you click OK, unsaved changes will be lost. Click Cancel to return to the map.')) { window.addEventListener('beforeunload', onbeforeUnloadListener);return false;} return true; " 
+                                action="{!URLFOR($Action.Visualization__c.Tab, $ObjectType.Visualization__c)}"
+                                 />
+                
+            <apex:commandButton value="Sharing" 
+                                action="{!URLFOR($Action.Visualization__c.Share, Visualization__c.Id)}" 
+                                rendered="{!hasAllAccess}" />
+			                    
+            <!-- Table/Record pane buttons (Right aligned) -->   
+            <apex:outputPanel id="paneTableToggle">
+                 <apex:panelGrid columns="3" style="float:right;" rendered="{!mapReady}">
+                    <apex:outputLabel >Records Pane: </apex:outputLabel>
+                    <!-- v align in panelGrid is NOT honored via columnClasses or rowClasses
+                         See https://developer.salesforce.com/forums/ForumsMain?id=906F000000098v0IAA -->
+                    <apex:panelGroup layout="block" style="display:table-cell; vertical-align:middle">
+                        <apex:commandLink rerender="debug" action="{!toggleTable}" type="image/png"
+                                          oncomplete="toggleTablePane(true, 'bcOuter', 'bcBottom');">
+                            <apex:image value="{!$Resource.esrimaps__RecordsPane_Up}" title="Open (Bottom)" />
+                        </apex:commandLink>
+                    </apex:panelGroup>
+                    
+                    <apex:panelGroup layout="block" style="display:table-cell; vertical-align:middle">
+                        <apex:commandLink rerender="debug" action="{!toggleTable}" type="image/png"
+                                          oncomplete="toggleTablePane(false, 'bcOuter', 'bcBottom');" >
+                           <apex:image value="{!$Resource.esrimaps__RecordsPane_Down}" title="Collapse/Minimize"/>
+                        </apex:commandLink>
+                    </apex:panelGroup>
+                </apex:panelGrid>   
+            </apex:outputPanel>
+            
+        </apex:outputPanel>
+
+    </apex:outputPanel>
+
+<apex:outputPanel id="panelMap">
+    <apex:outputPanel layout="block" rendered="{!NOT(ISBLANK(esrimaps__Visualization__c.Name))}">
+    <script>
+        initContainer(
+            "jazzAppDesigner",
+            "{!JSENCODE(Visualization__c.Name)}",
+            "{!JSENCODE(Visualization__c.Description__c)}",
+            {!canSave},
+            actionFunc_OnMapReady,
+            actionFunc_AddLayer, 
+            actionFunc_RemoveLayer, 
+            actionFunc_UpdateLayerSelection, 
+            
+            actionFunc_ReorderLayers,
+            actionFunc_RenameLayer,
+            
+            actionFunc_OnMapDirty
+            );
+    </script>
+
+<div data-dojo-type="dijit/layout/BorderContainer" class="claro"
+     data-dojo-props="gutters:false, region:'center'" id="bcOuter"
+     style="width: 100%; padding: 0px; margin: 0px; height: 600px;" >
+         
+         <div data-dojo-type="dijit/layout/ContentPane" data-dojo-props="splitter:false, region:'center'" style="width: 100%; padding: 0px; margin: 0px; overflow:hidden;">
+            <apex:iframe id="jazzAppDesigner" scrolling="false" height="100%" />
+         </div>
+         
+         <div data-dojo-type="dijit/layout/BorderContainer" id="bcBottom" data-dojo-props="gutters:false, splitter:true, minSize:100, maxSize: 500, region:'bottom'" style="opacity: 0; width: 100%; height:0px; padding: 0px; margin: 0px;">
+             <apex:actionstatus id="statusLoadTable">
+                 <!-- http://blog.shivanathd.com/2013/05/action-status-is-usually-used-to-show.html -->
+                 <apex:facet name="start">
+                     <div class="waitingSearchDiv" style="background-color: #fbfbfb;
+                            height: 100%;opacity:0.65;width:100%;"> 
+                            <div class="sfLoading" />
+                     </div>
+                 </apex:facet>
+             </apex:actionstatus>
+                
+                              
+            <apex:pageBlock >
+
+
+            <div data-dojo-type="dijit/layout/BorderContainer" class="claro" id="bcPageBlock"
+                 data-dojo-props="gutters:false, region:'center'" 
+                 style="width: 100%; height:100%; padding: 0px; margin: 0px;" >
+            
+
+<div data-dojo-type="dijit/layout/ContentPane" data-dojo-props="splitter:false, region:'top'" style="width: 100%; height: 3px; padding: 0px; margin: 0px;">
+<!--  START Spacer -->
+<!-- END Spacer -->
+</div>                 
+<div data-dojo-type="dijit/layout/ContentPane" data-dojo-props="splitter:false, region:'top'" style="width: 100%; padding: 0px; margin: 0px;">
+<!--  START header-->  
+    <apex:outputPanel id="header" >
+        <apex:pageMessage rendered="{!ISBLANK(objectType) && layers != null}" severity="INFO" strength="2"
+                          summary="No records to display yet."
+                          detail="Start mapping your Salesforce data by selecting Add data > from Salesforce." />                    
+    
+        <apex:pageBlockTable value="{!objectsSel}" var="o" rendered="{!NOT(ISBLANK(objectType))}" > 
+          <apex:facet name="header">
+               <apex:panelGrid cellspacing="0px" cellpadding="0px" columns="2" width="100%" columnClasses="gridNoBorder" rowClasses="gridNoBorder">
+                   <apex:panelGroup layout="block">
+                      <apex:outputlabel >Data Layers:&nbsp;</apex:outputlabel>
+                      <apex:actionStatus id="statusUpdateLayersDropdown">
+                          <apex:facet name="start">   
+		                     <apex:outputPanel >
+		                         <apex:selectList multiselect="false" size="1" value="{!currentLayerId}" disabled="true"> 
+                                   <apex:selectOptions value="{!layers}" />
+                                 </apex:selectList>
+		                         <div class="waitingSearchDiv" style="height: 100%;width:100%;"></div>
+		                         <apex:image value="/img/loading.gif" />
+		                     </apex:outputPanel>
+                          </apex:facet>
+                           
+                          <apex:facet name="stop">
+	                          <apex:selectList multiselect="false" size="1" value="{!currentLayerId}" id="selLayers"> 
+		                           <apex:selectOptions value="{!layers}" />
+		                           <apex:actionSupport status="statusLoadTable" event="onchange" 
+		                                               onsubmit="untrackSelection('{!JSENCODE(currentLayerId)}');" 
+		                                               action="{!refreshTable}"
+		                                               oncomplete="trackSelection('{!JSENCODE(currentLayerId)}', actionFunc_UpdateLayerSelection);"                                      
+		                                               rerender="header,footer,pbTable,debug"  />
+                               </apex:selectList>
+                           </apex:facet>
+                       </apex:actionStatus> 
+                        <apex:outputlabel >Selected Status:&nbsp;</apex:outputlabel>
+                        <apex:selectList multiselect="false" size="1" value="{!showAllRecords}" id="selStatus"> 
+                         <apex:selectOptions value="{!showSelectedOptions}" />  
+                         <apex:actionSupport status="fetchStatus" event="onchange" action="{!refreshPage}" rerender="footer,pbTable,debug" />                     
+                         </apex:selectList>
+                   </apex:panelGroup>
+    
+                   <apex:outputPanel layout="block" style="float: right; vertical-align:top">
+                       <apex:commandLink rerender="debug" action="{!toggleTable}" type="image/png"
+                                         oncomplete="toggleTablePane(false, 'bcOuter', 'bcBottom');" >
+                          <apex:image value="{!$Resource.esrimaps__RecordsPane_Down}" title="Collapse/Minimize"/>
+                       </apex:commandLink>
+                   </apex:outputPanel>
+
+                   <apex:panelGroup >
+                       <apex:outputText rendered="{!ISBLANK(objectNameField)}">&nbsp;</apex:outputText>
+                       <apex:outputText rendered="{!NOT(ISBLANK(objectNameField))}">{!$ObjectType[objectType].Label} Record(s){!IF(ISBLANK(viewName), '', ' - ' + viewName)}</apex:outputText>
+                   </apex:panelGroup>
+                   
+               </apex:panelGrid>
+          </apex:facet>           
+        </apex:pageBlockTable>
+    </apex:outputPanel>        
+<!-- END header -->
+</div>
+                         
+<div data-dojo-type="dijit/layout/ContentPane" data-dojo-props="splitter:false, region:'bottom'" style="width: 100%; padding: 0px; margin: 0px;">
+<!-- START footer -->
+     <apex:outputPanel id="footer" >
+         <apex:panelGrid columns="3" width="100%"  columnClasses="colLeft,colMiddle,colRight"
+                         rendered="{!NOT(ISBLANK(objectType)) && (controllerWrapper != null && controllerWrapper.resultSize > 0)}" >
+             
+             <apex:outputlabel id="recordCount">{!1 + ((controllerWrapper.pageNumber - 1) * controllerWrapper.pageSize)} - {!MIN((controllerWrapper.pageNumber * controllerWrapper.pageSize), controllerWrapper.resultSize)} of {!controllerWrapper.resultSize} ({!selectionSize} selected)</apex:outputlabel>
+             
+             <apex:outputPanel >
+                <apex:commandButton status="statusLoadTable" reRender="pbTable,footer,debug" value="<<" action="{!first}" disabled="{!NOT(controllerWrapper.hasPrevious)}" title="First Page"/>
+                <apex:commandButton status="statusLoadTable" reRender="pbTable,footer,debug" value="< Previous" action="{!previous}" disabled="{!NOT(controllerWrapper.hasPrevious)}" title="Previous Page"/>
+                <apex:commandButton status="statusLoadTable" reRender="pbTable,footer,debug" value="Next >" action="{!next}" disabled="{!NOT(controllerWrapper.hasNext)}" title="Next Page"/>
+                <apex:commandButton status="statusLoadTable" reRender="pbTable,footer,debug" value=">>" action="{!last}" disabled="{!NOT(controllerWrapper.hasNext)}" title="Last Page"/>
+             </apex:outputPanel>
+
+             <apex:outputPanel >
+                 <apex:outputlabel id="pageCount">Page {!controllerWrapper.pageNumber} of {!CEILING(controllerWrapper.resultSize / controllerWrapper.pageSize)}</apex:outputlabel>
+             </apex:outputPanel>
+         </apex:panelGrid> 
+     </apex:outputPanel>
+<!-- END footer -->
+</div>
+
+<div data-dojo-type="dijit/layout/ContentPane" data-dojo-props="splitter:false, region:'center'" style="width: 100%;  padding: 0px; margin: 0px;">
+<!-- START table -->
+    <apex:outputPanel id="pbTableContainer">
+         <!--  data table, scrollable -->
+         <apex:pageBlockTable value="{!objectsSel}" var="o" id="pbTable" 
+                              rendered="{!NOT(ISBLANK(objectType))}"
+                              columnClasses="cellNoWrap"> 
+            
+            <apex:facet name="footer">
+                <apex:panelGrid width="100%" rendered="{!(controllerWrapper != null && controllerWrapper.resultSize = 0)}" >
+                    <apex:outputText rendered="{!NOT(ISBLANK(objectNameField))}">
+                       {!IF($ObjectType[objectType].Accessible, 'No records to display', 'Insufficient Privileges. You do not have the level of access necessary to perform the operation you requested.')}
+                    </apex:outputText>
+                    <apex:outputText rendered="{!ISBLANK(objectNameField)}">
+                         Unknown object type ({!objectType}). You do not have the level of access necessary to perform the operation you requested.
+                    </apex:outputText>                
+                </apex:panelGrid>
+            </apex:facet>                
+            
+            <apex:column headerValue="Select" rendered="{!canSelect && (controllerWrapper != null && controllerWrapper.resultSize > 0)}">
+                <!--     
+                <apex:facet name="header">
+                    <apex:inputCheckBox value="{!checkAllValue}">
+                       <apex:actionSupport event="onchange" rerender="pbTable" action="{!selectAllFromCurrentPage}" />
+                    </apex:inputCheckBox>
+                </apex:facet>
+                -->
+              
+                <apex:inputCheckBox value="{!selection[o.id]}">
+                    <apex:actionSupport status="statusLoadTable" event="onchange" rerender="debug,footer" 
+                                        action="{!selectRecord}"
+                                        oncomplete="updateSelection('{!JSENCODE(o.id)}', '{!JSENCODE(currentLayerId)}', {!selection[o.id]});">
+                        <apex:param name="paramSelectionId" value="{!o.id}" />
+                    </apex:actionSupport>
+    
+                </apex:inputCheckBox>
+            </apex:column>
+            
+            <apex:column headerValue="Action" rendered="{!(controllerWrapper != null && controllerWrapper.resultSize > 0)}">
+                <apex:commandLink value="Go to" rerender="debug" onclick="goTo('{!JSENCODE(o.id)}', '{!JSENCODE(currentLayerId)}');" />
+            </apex:column>
+
+            <!--  [Object]::Name field column as a link to open the record TODO: Hover details -->
+            <apex:column rendered="{!NOT(ISBLANK(objectNameField))}" 
+                         headerValue="{!$ObjectType[objectType].Fields[objectNameField].Label}">
+                <apex:outputLink value="/{!o}" target="_blank">{!o[objectNameField]}</apex:outputLink>
+            </apex:column>
+
+            <apex:column rendered="{!ISBLANK(objectNameField)}" 
+                         headerValue="Record">
+                <apex:outputLink value="/{!o}" target="_blank"></apex:outputLink>
+            </apex:column>
+            
+            <!-- Layer fields -->
+            <apex:repeat value="{!displayFields}" var="f" id="layerCols">
+                <apex:column value="{!o[f]}" 
+                             rendered="{!AND((controllerWrapper != null && controllerWrapper.resultSize > 0),
+                                              LOWER(f) != 'id',
+                                              LOWER(f) != LOWER(objectNameField)  
+                                       )}" />
+            </apex:repeat> 
+    
+          </apex:pageBlockTable>              
+    </apex:outputPanel>
+<!-- END table -->
+</div>
+                 
+             </div>
+<!--  END inner bc -->       
+  
+</apex:pageBlock>
+            
+         </div>
+<!--  END bottom table ContentPane -->
+     </div>
+<!--  END outer bc -->
+    </apex:outputPanel>
+</apex:outputPanel>
+
+<apex:outputPanel id="popupSaveAs">
+   <apex:outputPanel styleClass="popupContainer" layout="block" rendered="{!showSaveAs}">
+     <apex:outputPanel styleClass="popupBg" layout="block"></apex:outputPanel>
+     <apex:outputPanel styleClass="popupCenter" layout="block">
+      <apex:pageBlock id="pbSaveAs" title="Save Map As" mode="edit" >
+            <script>
+                function saveAs(){
+                    
+                    var nameField = document.getElementById("{!$Component.pageForm.pbSaveAs.pbsSaveAs.inputNameCopy}");
+                    var descField = document.getElementById("{!$Component.pageForm.pbSaveAs.pbsSaveAs.inputDescriptionCopy}");
+                    
+                    if (nameField && nameField.value && nameField.value.trim()) {
+	                    saveAsEMFMap(
+	                        function() {
+	                            initMapProperties(nameField && nameField.value, descField && descField.value); 
+	                        },  
+	                        function(id) {
+	                            if (id){
+	                                // Redirect!
+	                                window.location.href="/" + id;
+	                            }
+	                            else {
+	                                actionFunc_HideSaveAs();
+	                            }
+	                        });
+                    }
+                    else {
+                        actionFunc_HideSaveAs();
+                    }
+                }
+            </script>
+            <apex:pageBlockSection id="pbsSaveAs" collapsible="false" columns="1">
+                <apex:inputField value="{!esrimaps__Visualization__c.Name}" required="true" id="inputNameCopy"/>
+                <apex:inputField value="{!esrimaps__Visualization__c.esrimaps__Description__c}" id="inputDescriptionCopy" />
+            </apex:pageBlockSection>
+            <apex:pageblockButtons location="bottom">
+                <apex:commandButton value="{!IF(disableSave, 'Saving...', 'Save' )}" 
+                                    disabled="{!disableSave || NOT(mapReady)}" 
+                                    rerender="pbsSaveAs" id="cmdSaveAsOK"
+                                    action="{!saveAs}" status="statusSaveMap"
+                                    onclick="saveAs();" />
+                
+                <apex:commandButton value="Cancel" disabled="{!disableSave || NOT(mapReady)}" id="cmdSavsAsCancel"
+                                    status="statusSaveMap" action="{!cancelSaveAs}" immediate="true" rerender="popupSaveAs"  />
+            </apex:pageblockButtons>
+            
+            
+      </apex:pageBlock>
+      </apex:outputPanel>
+    </apex:outputPanel>    
+</apex:outputPanel>
+        
+<apex:actionstatus id="statusSaveMap" >
+    <apex:facet name="start">
+        <div class="waitingSearchDiv" style="background-color: #fbfbfb; height: 100%;opacity:0.65;width:100%;"> 
+               <div class="sfLoading" />
+        </div>
+    </apex:facet>
+</apex:actionstatus>
+</apex:form>
+</apex:page>
